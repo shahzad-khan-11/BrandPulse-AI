@@ -1,0 +1,321 @@
+{
+  "id": "weeklyExecRep012",
+  "name": "Weekly Executive Report Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "value": 7
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Cron Trigger Weekly",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/collect-mentions",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "days",
+              "value": "7"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2",
+      "name": "Collect Weekly Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/calculate-stats",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "mentions",
+              "value": "={{$json.mentions}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "3",
+      "name": "Calculate Weekly Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/generate-summary",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "stats",
+              "value": "={{$json.stats}}"
+            },
+            {
+              "name": "mentions",
+              "value": "={{$node[\"Collect Weekly Mentions\"].json.mentions}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/save-report",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "name",
+              "value": "Weekly Executive Intelligence Report"
+            },
+            {
+              "name": "stats",
+              "value": "={{$node[\"Calculate Weekly Stats\"].json.stats}}"
+            },
+            {
+              "name": "aiSummary",
+              "value": "={{$node[\"Generate Summary\"].json.aiSummary}}"
+            },
+            {
+              "name": "filters",
+              "value": "={ \"days\": 7 }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5",
+      "name": "Save Executive Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/send-email",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "executives@enterprise.com"
+            },
+            {
+              "name": "subject",
+              "value": "Weekly Executive Brand Pulse Report"
+            },
+            {
+              "name": "html",
+              "value": "<h3>Weekly Brand Performance Analysis</h3><p>Your weekly analytics report has been processed. Please find the PDF report attached to this email.</p>"
+            },
+            {
+              "name": "reportId",
+              "value": "={{$json.report._id}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "6",
+      "name": "Email PDF Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/log-activity",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "workflowType",
+              "value": "weekly_report"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result",
+              "value": "={ \"reportId\": \"{{$node[\"Save Executive Report\"].json.report._id}}\", \"reportSaved\": true }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "7",
+      "name": "Log Automation Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1300, 300]
+    }
+  ],
+  "connections": {
+    "Cron Trigger Weekly": {
+      "main": [
+        [
+          {
+            "node": "Collect Weekly Mentions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Weekly Mentions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Weekly Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Weekly Stats": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Save Executive Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Executive Report": {
+      "main": [
+        [
+          {
+            "node": "Email PDF Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email PDF Report": {
+      "main": [
+        [
+          {
+            "node": "Log Automation Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}

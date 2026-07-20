@@ -1,0 +1,386 @@
+{
+  "id": "2UrR97SOzJ9wBszk",
+  "name": "Positive Trend Notification Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 4
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/positive-trend-check",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "threshold",
+              "value": "5"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2",
+      "name": "Positive Trend Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.trigger}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "If Trend Exceeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/collect-mentions",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "days",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4",
+      "name": "Collect Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/calculate-stats",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "mentions",
+              "value": "={{$json.mentions}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5",
+      "name": "Calculate Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/generate-summary",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "stats",
+              "value": "={{$json.stats}}"
+            },
+            {
+              "name": "mentions",
+              "value": "={{$node[\"Collect Mentions\"].json.mentions}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "6",
+      "name": "Generate AI Recommendation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/notify-dashboard",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "title",
+              "value": "🔥 Positive Brand Trend Detected"
+            },
+            {
+              "name": "message",
+              "value": "=Positive sentiment spike detected ({{$node[\"Positive Trend Check\"].json.count}} posts). AI Recommendation: {{$json.aiSummary.recommendations[0].title}}"
+            },
+            {
+              "name": "type",
+              "value": "info"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "7",
+      "name": "Notify Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/log-activity",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "workflowType",
+              "value": "positive_trend"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result",
+              "value": "={ \"spikeDetected\": true, \"positiveCount\": {{$node[\"Positive Trend Check\"].json.count}} }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "8",
+      "name": "Log Automation Activity Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/log-activity",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "workflowType",
+              "value": "positive_trend"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result",
+              "value": "={ \"spikeDetected\": false, \"positiveCount\": {{$node[\"Positive Trend Check\"].json.count}} }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "9",
+      "name": "Log Automation Activity No Spike",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 400]
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Positive Trend Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Positive Trend Check": {
+      "main": [
+        [
+          {
+            "node": "If Trend Exceeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Trend Exceeded": {
+      "main": [
+        [
+          {
+            "node": "Collect Mentions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Automation Activity No Spike",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Mentions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Stats": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Notify Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Log Automation Activity Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}

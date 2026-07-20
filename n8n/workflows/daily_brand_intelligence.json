@@ -1,0 +1,260 @@
+{
+  "id": "dailyBrandIntel1",
+  "name": "Daily Brand Intelligence Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 8
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Cron Trigger Daily",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/collect-mentions",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "days",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2",
+      "name": "Collect Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/calculate-stats",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "mentions",
+              "value": "={{$json.mentions}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "3",
+      "name": "Calculate Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/generate-summary",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "stats",
+              "value": "={{$json.stats}}"
+            },
+            {
+              "name": "mentions",
+              "value": "={{$node[\"Collect Mentions\"].json.mentions}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/send-email",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "management@enterprise.com"
+            },
+            {
+              "name": "subject",
+              "value": "Daily Brand Intelligence Report"
+            },
+            {
+              "name": "html",
+              "value": "<h3>Daily Intelligence Analysis</h3><p>Health Score: {{$node[\"Calculate Stats\"].json.stats.brandHealthScore}}/100</p><p>Summary: {{$json.aiSummary.brandHealthSummary}}</p><p>Sentiment Overview: {{$json.aiSummary.sentimentOverview}}</p>"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5",
+      "name": "Email Daily Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/log-activity",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "6a5bb08ddcaf740407a00574"
+            },
+            {
+              "name": "workflowType",
+              "value": "daily_intelligence"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result",
+              "value": "={ \"processedMentions\": {{$node[\"Collect Mentions\"].json.count}}, \"healthScore\": {{$node[\"Calculate Stats\"].json.stats.brandHealthScore}} }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "6",
+      "name": "Log Automation Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Cron Trigger Daily": {
+      "main": [
+        [
+          {
+            "node": "Collect Mentions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Mentions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Stats": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Email Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Log Automation Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}

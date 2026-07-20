@@ -1,0 +1,503 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════
+   ENTERPRISE THEME SYSTEM — CSS Custom Properties
+   Dark is the default production theme.
+   Light theme follows GitHub / Linear / Stripe aesthetic.
+   ═══════════════════════════════════════════ */
+
+:root {
+  /* ── Dark Theme (Default) ── */
+  --color-bg:           #05070f;
+  --color-bg-alt:       #070a13;
+  --color-surface:      #0b0f19;
+  --color-surface-alt:  rgba(11, 15, 25, 0.95);
+  --color-card:         rgba(11, 15, 25, 0.45);
+  --color-card-hover:   rgba(15, 23, 42, 0.65);
+  --color-border:       rgba(51, 65, 85, 0.5);      /* slate-700/50 */
+  --color-border-soft:  rgba(30, 41, 59, 0.6);      /* slate-800/60 */
+  --color-text-primary: #f1f5f9;                     /* slate-100 */
+  --color-text-second:  #cbd5e1;                     /* slate-300 */
+  --color-text-muted:   #64748b;                     /* slate-500 */
+  --color-text-faint:   #475569;                     /* slate-600 */
+  --color-sidebar:      rgba(15, 23, 42, 0.15);      /* slate-900/15 */
+  --color-navbar:       rgba(5, 7, 15, 0.35);
+  --color-dropdown:     rgba(11, 15, 25, 0.95);
+  --color-input:        rgba(15, 23, 42, 0.4);
+  --color-modal-bg:     rgba(11, 15, 25, 0.95);
+  --color-modal-overlay:rgba(5, 7, 15, 0.85);
+  --color-footer:       #05070f;
+  --color-scrollbar:    rgba(51, 65, 85, 0.6);
+  --color-accent:       rgba(139, 92, 246, 0.03);
+  --shadow-card:        0 12px 40px 0 rgba(0, 0, 0, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  --shadow-dropdown:    0 20px 60px 0 rgba(0, 0, 0, 0.5);
+  --shadow-panel:       0 0 40px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* ── Light Theme ── */
+html.light,
+:root.light {
+  --color-bg:           #f8fafc;
+  --color-bg-alt:       #f1f5f9;
+  --color-surface:      #ffffff;
+  --color-surface-alt:  rgba(255, 255, 255, 0.98);
+  --color-card:         #ffffff;
+  --color-card-hover:   #ffffff;
+  --color-border:       #e2e8f0;                     /* slate-200 */
+  --color-border-soft:  #e2e8f0;
+  --color-text-primary: #0f172a;                     /* slate-900 */
+  --color-text-second:  #1e293b;                     /* slate-800 */
+  --color-text-muted:   #64748b;                     /* slate-500 */
+  --color-text-faint:   #94a3b8;                     /* slate-400 */
+  --color-sidebar:      #ffffff;
+  --color-navbar:       rgba(255, 255, 255, 0.95);
+  --color-dropdown:     #ffffff;
+  --color-input:        #ffffff;
+  --color-modal-bg:     #ffffff;
+  --color-modal-overlay:rgba(15, 23, 42, 0.4);
+  --color-footer:       #f8fafc;
+  --color-scrollbar:    rgba(203, 213, 225, 0.8);
+  --color-accent:       rgba(99, 102, 241, 0.015);
+  --shadow-card:        0 1px 3px 0 rgba(0, 0, 0, 0.07), 0 1px 2px -1px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  --shadow-dropdown:    0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  --shadow-panel:       0 20px 40px -10px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+@layer base {
+  body {
+    @apply font-sans antialiased overflow-x-hidden;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    background-image:
+      radial-gradient(at 0% 0%, var(--color-accent) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, var(--color-accent) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   THEME-AWARE UTILITY CLASSES
+   ═══════════════════════════════════════════ */
+
+/* App root wrapper (replaces hardcoded bg-[#05070f]) */
+.app-root {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+/* Surface panels */
+.theme-surface {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+/* Dropdown / popup panels */
+.theme-dropdown {
+  background-color: var(--color-dropdown);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-dropdown);
+  color: var(--color-text-primary);
+}
+
+/* Footer */
+.theme-footer {
+  background-color: var(--color-footer);
+  border-top-color: var(--color-border-soft);
+}
+
+/* Modal overlay */
+.theme-modal-overlay {
+  background-color: var(--color-modal-overlay);
+}
+
+/* Modal content panel */
+.theme-modal {
+  background-color: var(--color-modal-bg);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Sidebar */
+.theme-sidebar {
+  background-color: var(--color-sidebar);
+  border-right-color: var(--color-border);
+}
+
+/* Navbar / Topbar */
+.theme-navbar {
+  background-color: var(--color-navbar);
+  border-bottom-color: var(--color-border);
+}
+
+/* Input fields */
+.theme-input {
+  background-color: var(--color-input);
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+/* ═══════════════════════════════════════════
+   GLASS PANEL COMPONENTS
+   ═══════════════════════════════════════════ */
+
+.glass-panel {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  border-radius: 1.25rem;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .glass-panel {
+  background: rgba(11, 15, 25, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-hover {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-hover:hover {
+  transform: translateY(-4px) scale(1.005);
+  border-color: rgba(99, 102, 241, 0.2);
+  box-shadow: var(--shadow-card);
+  background-color: var(--color-card-hover);
+}
+
+.dark .glass-panel-hover:hover {
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 24px 50px 0 rgba(0, 0, 0, 0.35), 0 0 20px 0 rgba(139, 92, 246, 0.06), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.glass-input {
+  @apply bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all duration-300 backdrop-blur-md;
+}
+
+.glass-button-primary {
+  @apply bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:shadow-indigo-500/30 hover:shadow-xl text-white font-bold px-5 py-2.5 rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/15 cursor-pointer;
+}
+
+.glass-button-secondary {
+  @apply bg-slate-100/60 hover:bg-slate-200/80 dark:bg-slate-800/30 dark:hover:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800/80 dark:hover:border-slate-700 text-slate-700 dark:text-slate-200 font-bold px-5 py-2.5 rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md;
+}
+
+.glow-overlay {
+  position: relative;
+}
+.glow-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.15);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.glow-overlay:hover::after {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════
+   CUSTOM SCROLLBAR
+   ═══════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-scrollbar);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-muted);
+}
+
+/* ═══════════════════════════════════════════
+   GLOBAL FORM FIELDS
+   ═══════════════════════════════════════════ */
+
+/* In light theme, override any hardcoded dark bg-slate-950/X on inputs */
+html.light input,
+html.light textarea,
+html.light select {
+  background-color: var(--color-input) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* Dark theme — respect Tailwind utility classes, only set defaults */
+input, textarea, select {
+  background-color: var(--color-input);
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1 !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  @apply border-indigo-500 ring-2 ring-indigo-500/15;
+  outline: none !important;
+}
+
+input:hover, textarea:hover, select:hover {
+  border-color: var(--color-text-faint);
+}
+
+input:disabled, textarea:disabled, select:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Select option tags */
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+/* ═══════════════════════════════════════════
+   MICRO-INTERACTION ANIMATIONS
+   ═══════════════════════════════════════════ */
+
+.hover-lift {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+.premium-gradient-text {
+  @apply bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-300 bg-clip-text text-transparent;
+}
+
+/* Light mode gradient text — deeper indigo for contrast */
+html.light .premium-gradient-text {
+  background-image: linear-gradient(to right, #4f46e5, #7c3aed, #4f46e5) !important;
+}
+
+.glow-btn:hover {
+  box-shadow: 0 0 20px 2px rgba(99, 102, 241, 0.4);
+}
+
+@keyframes textShimmer {
+  0%   { background-position: 0% 50% }
+  50%  { background-position: 100% 50% }
+  100% { background-position: 0% 50% }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, #fff, #a5b4fc, #c084fc, #fff);
+  background-size: 300% 300%;
+  animation: textShimmer 4s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Light mode shimmer — deep indigo palette */
+html.light .shimmer-text {
+  background: linear-gradient(90deg, #1e1b4b, #4338ca, #6d28d9, #1e1b4b) !important;
+  background-size: 300% 300% !important;
+  animation: textShimmer 4s ease infinite !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* ═══════════════════════════════════════════
+   LIGHT THEME — TAILWIND DARK: VARIANT OVERRIDES
+   These selectors target Tailwind utilities that are only scoped to .dark
+   and provide correct light-mode equivalents when .light class is used.
+   ═══════════════════════════════════════════ */
+
+/* In light mode, text that would be light on dark should be dark */
+html.light .text-slate-100 { color: #0f172a !important; }
+html.light .text-slate-200 { color: #1e293b !important; }
+html.light .text-slate-300 { color: #334155 !important; }
+html.light .text-slate-400 { color: #475569 !important; }
+html.light .text-slate-500 { color: #64748b !important; }
+
+/* Accent color contrast fixes for light mode */
+html.light .text-indigo-400  { color: #4f46e5 !important; }
+html.light .text-purple-400  { color: #7c3aed !important; }
+html.light .text-emerald-400 { color: #059669 !important; }
+html.light .text-rose-400    { color: #dc2626 !important; }
+html.light .text-rose-500    { color: #e11d48 !important; }
+html.light .text-amber-400   { color: #d97706 !important; }
+html.light .text-blue-400    { color: #2563eb !important; }
+html.light .text-pink-400    { color: #db2777 !important; }
+html.light .text-teal-400    { color: #0d9488 !important; }
+html.light .text-cyan-400    { color: #0891b2 !important; }
+
+/* In light mode, nav item inactive text */
+html.light .text-slate-400.dark\:text-slate-500 {
+  color: #475569 !important;
+}
+
+/* Active nav item text stays white on gradient bg — don't override */
+
+/* Light mode: notification panel & dropdown border */
+html.light .border-slate-800 { border-color: #e2e8f0 !important; }
+html.light .divide-slate-800\/60 > * + * { border-color: rgba(226, 232, 240, 0.6) !important; }
+
+/* Light mode badge backgrounds */
+html.light .bg-indigo-500\/10  { background-color: rgba(79, 70, 229, 0.08) !important; }
+html.light .bg-purple-500\/10  { background-color: rgba(124, 58, 237, 0.08) !important; }
+html.light .bg-emerald-500\/10 { background-color: rgba(5, 150, 105, 0.08) !important; }
+html.light .bg-rose-500\/10    { background-color: rgba(220, 38, 38, 0.08) !important; }
+html.light .bg-amber-500\/10   { background-color: rgba(217, 119, 6, 0.08) !important; }
+html.light .bg-blue-500\/10    { background-color: rgba(37, 99, 235, 0.08) !important; }
+
+/* Light mode badge borders */
+html.light .border-indigo-500\/25 { border-color: rgba(79, 70, 229, 0.25) !important; }
+html.light .border-purple-500\/25  { border-color: rgba(124, 58, 237, 0.25) !important; }
+html.light .border-emerald-500\/25 { border-color: rgba(5, 150, 105, 0.25) !important; }
+html.light .border-rose-500\/25    { border-color: rgba(220, 38, 38, 0.25) !important; }
+html.light .border-amber-500\/25   { border-color: rgba(217, 119, 6, 0.25) !important; }
+html.light .border-blue-500\/25    { border-color: rgba(37, 99, 235, 0.25) !important; }
+html.light .border-indigo-500\/15  { border-color: rgba(79, 70, 229, 0.15) !important; }
+html.light .border-indigo-500\/25 { border-color: rgba(79, 70, 229, 0.25) !important; }
+html.light .border-purple-500\/25  { border-color: rgba(124, 58, 237, 0.25) !important; }
+html.light .border-emerald-500\/25 { border-color: rgba(5, 150, 105, 0.25) !important; }
+html.light .border-rose-500\/25    { border-color: rgba(220, 38, 38, 0.25) !important; }
+html.light .border-amber-500\/25   { border-color: rgba(217, 119, 6, 0.25) !important; }
+html.light .border-blue-500\/25    { border-color: rgba(37, 99, 235, 0.25) !important; }
+html.light .border-indigo-500\/15  { border-color: rgba(79, 70, 229, 0.15) !important; }
+
+/* ═══════════════════════════════════════════
+   LIGHT THEME — Card & Panel Background Overrides
+   These handle components that use dark Tailwind utilities (bg-slate-900/40, etc.)
+   without dark: prefixes — typically glass-panel cards and stat panels.
+   ═══════════════════════════════════════════ */
+
+/* Convert dark semi-transparent slate backgrounds to white in light mode */
+html.light .glass-panel.bg-slate-900\/40,
+html.light .glass-panel.bg-slate-900\/30,
+html.light .glass-panel.bg-slate-900\/20,
+html.light .bg-slate-900\/40,
+html.light .bg-slate-900\/30,
+html.light .bg-slate-900\/20 {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/40,
+html.light .bg-slate-950\/20,
+html.light .bg-slate-950\/45 {
+  background-color: rgba(248, 250, 252, 0.8) !important;
+}
+
+/* Fix borders that come with those panels */
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/60,
+html.light .border-slate-800\/50,
+html.light .border-slate-800\/40,
+html.light .border-slate-800\/20 {
+  border-color: rgba(226, 232, 240, 0.8) !important;
+}
+
+/* Fix text that's designed for dark panels */
+html.light .text-slate-350  { color: #475569 !important; }
+html.light .text-slate-450  { color: #64748b !important; }
+html.light .text-slate-205  { color: #1e293b !important; }
+html.light .text-slate-355  { color: #475569 !important; }
+html.light .text-slate-650  { color: #94a3b8 !important; }
+html.light .text-slate-705  { color: #334155 !important; }
+
+/* Active gradient nav buttons should retain white text */
+html.light .bg-gradient-to-r.from-indigo-600 .text-white,
+html.light .from-indigo-600.to-purple-600 { color: #ffffff; }
+
+/* Override dark slate sidebar area panel backgrounds */
+html.light .bg-slate-900\/15 { background-color: #ffffff !important; }
+html.light .bg-slate-900\/10 { background-color: rgba(248, 250, 252, 0.5) !important; }
+
+/* Fix dark hover backgrounds in light mode */
+html.light .hover\:bg-slate-800:hover { background-color: #f1f5f9 !important; }
+html.light .hover\:bg-slate-900\/60:hover { background-color: rgba(248, 250, 252, 0.9) !important; }
+html.light .hover\:bg-slate-900\/40:hover { background-color: rgba(241, 245, 249, 0.9) !important; }
+
+/* Fix rose-950 / indigo-950 backgrounds */
+html.light .bg-rose-950\/20  { background-color: rgba(255, 241, 242, 0.8) !important; }
+html.light .bg-indigo-950\/20 { background-color: rgba(238, 242, 255, 0.8) !important; }
+html.light .hover\:bg-rose-900\/30:hover { background-color: rgba(255, 228, 230, 0.9) !important; }
+
+/* Fix border-rose-900/20 */
+html.light .border-rose-900\/20 { border-color: rgba(254, 202, 202, 0.5) !important; }
+html.light .text-rose-450 { color: #dc2626 !important; }
+
+/* ─── COMPACT LAYOUT OVERRIDES ─── */
+html.compact-layout {
+  font-size: 13.5px !important;
+}
+html.compact-layout .p-6, 
+html.compact-layout .p-5, 
+html.compact-layout .p-4 {
+  padding: 0.75rem !important;
+}
+html.compact-layout .py-6, 
+html.compact-layout .py-5, 
+html.compact-layout .py-4,
+html.compact-layout .py-3\.5 {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+}
+html.compact-layout .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.75rem !important;
+}
+html.compact-layout .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.6rem !important;
+}
+html.compact-layout .gap-6 {
+  gap: 0.75rem !important;
+}
+html.compact-layout .gap-5 {
+  gap: 0.6rem !important;
+}
+
+/* ─── ENTERPRISE MODAL / DRAWER ANIMATIONS ─── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

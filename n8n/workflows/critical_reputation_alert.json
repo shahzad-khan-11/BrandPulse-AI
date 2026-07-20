@@ -1,0 +1,434 @@
+{
+  "id": "critRepAlert0123",
+  "name": "Critical Reputation Alert Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brandpulse-mentions",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/detect-language",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{$json.body.mention.content}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2",
+      "name": "Language Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/detect-hyperlocal",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{$node[\"Webhook Trigger\"].json.body.mention.content}}"
+            },
+            {
+              "name": "language",
+              "value": "={{$json.language}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$node[\"Webhook Trigger\"].json.body.mention.source}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "3",
+      "name": "Hyperlocal Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/detect-threat",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{$node[\"Webhook Trigger\"].json.body.mention.content}}"
+            },
+            {
+              "name": "sentiment",
+              "value": "={{$node[\"Language Detection\"].json.sentiment}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4",
+      "name": "Threat Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.threat.priority}}",
+              "value2": "critical"
+            }
+          ]
+        }
+      },
+      "id": "5",
+      "name": "If Priority == Critical",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/generate-summary",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "stats",
+              "value": "={ \"totalMentions\": 1, \"brandHealthScore\": 10, \"sentimentDistribution\": { \"positive\": 0, \"neutral\": 0, \"negative\": 1 }, \"threatDistribution\": { \"critical\": 1, \"high\": 0, \"medium\": 0, \"low\": 0 } }"
+            },
+            {
+              "name": "mentions",
+              "value": "=[ { \"content\": \"{{$node[\"Webhook Trigger\"].json.body.mention.content}}\", \"sentiment\": \"negative\", \"priority\": \"critical\" } ]"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "6",
+      "name": "Generate AI Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/send-email",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "brand_safety@enterprise.com"
+            },
+            {
+              "name": "subject",
+              "value": "CRITICAL REPUTATION ALERT - BrandPulse AI"
+            },
+            {
+              "name": "html",
+              "value": "<h3>Critical Alert Triggered</h3><p>Content: {{$node[\"Webhook Trigger\"].json.body.mention.content}}</p><p>Threat assessment: {{$node[\"Threat Detection\"].json.threat.explanation}}</p>"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "7",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/save-report",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "={{$node[\"Webhook Trigger\"].json.body.mention.brand}}"
+            },
+            {
+              "name": "name",
+              "value": "Critical Reputation Incident Report"
+            },
+            {
+              "name": "stats",
+              "value": "={ \"totalMentions\": 1, \"brandHealthScore\": 10, \"sentimentDistribution\": { \"positive\": 0, \"neutral\": 0, \"negative\": 1 }, \"threatDistribution\": { \"critical\": 1, \"high\": 0, \"medium\": 0, \"low\": 0 }, \"locationDistribution\": {}, \"languageDistribution\": {}, \"sourceDistribution\": {} }"
+            },
+            {
+              "name": "aiSummary",
+              "value": "={{$node[\"Generate AI Summary\"].json.aiSummary}}"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "8",
+      "name": "Save Executive Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/log-activity",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "={{$node[\"Webhook Trigger\"].json.body.mention.brand}}"
+            },
+            {
+              "name": "workflowType",
+              "value": "critical_alert"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result",
+              "value": "={ \"alertSent\": true, \"severity\": \"critical\" }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "9",
+      "name": "Log Automation Activity Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/workflows/n8n/log-activity",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "brandId",
+              "value": "={{$node[\"Webhook Trigger\"].json.body.mention.brand}}"
+            },
+            {
+              "name": "workflowType",
+              "value": "critical_alert"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result",
+              "value": "={ \"alertSent\": false, \"details\": \"Not a critical priority incident\" }"
+            }
+          ]
+        },
+        "options": {
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-BrandPulse-Signature",
+                "value": "default_secret"
+              }
+            ]
+          }
+        }
+      },
+      "id": "10",
+      "name": "Log Automation Activity Skipped",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1100, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Language Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Language Detection": {
+      "main": [
+        [
+          {
+            "node": "Hyperlocal Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hyperlocal Detection": {
+      "main": [
+        [
+          {
+            "node": "Threat Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threat Detection": {
+      "main": [
+        [
+          {
+            "node": "If Priority == Critical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Priority == Critical": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Automation Activity Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alert": {
+      "main": [
+        [
+          {
+            "node": "Save Executive Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Executive Report": {
+      "main": [
+        [
+          {
+            "node": "Log Automation Activity Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}

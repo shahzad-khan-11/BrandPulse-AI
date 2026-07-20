@@ -1,0 +1,68 @@
+# ──────────────────────────────────────────────────────────
+# BrandPulse AI — Render Deployment Configuration
+# ──────────────────────────────────────────────────────────
+# This file is used by Render to auto-configure the backend
+# service when the GitHub repo is connected.
+#
+# Docs: https://render.com/docs/render-yaml-spec
+# ──────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: brandpulse-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── Set these in the Render Dashboard → Environment ──────────────────
+      # (Do NOT put real secrets here — this file is public)
+      - key: PORT
+        value: 5000
+
+      - key: MONGODB_URI
+        sync: false          # Must be set manually in Render dashboard
+
+      - key: JWT_SECRET
+        generateValue: true  # Render generates a secure random value
+
+      - key: JWT_EXPIRES_IN
+        value: 7d
+
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: NEWS_API_KEY
+        sync: false
+
+      - key: NEWS_API_BASE_URL
+        value: https://newsapi.org/v2
+
+      - key: FRONTEND_URL
+        sync: false          # Set to your Vercel URL after first deploy
+
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+
+      - key: SMTP_PORT
+        value: 587
+
+      - key: SMTP_SECURE
+        value: false
+
+      - key: SMTP_USER
+        sync: false
+
+      - key: SMTP_PASS
+        sync: false
+
+      - key: EMAIL_FROM
+        sync: false
