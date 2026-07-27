@@ -20,8 +20,8 @@ const createTransporter = () => {
     return null;
   }
 
-  const port = parseInt(process.env.SMTP_PORT, 10) || 587;
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+  const port = parseInt(process.env.SMTP_PORT, 10) || 465;
+  const secure = true;
 
   logger.info(
     `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🛠️ Creating Transporter: node=${process.version} platform=${process.platform} host=${process.env.SMTP_HOST} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
@@ -36,14 +36,14 @@ const createTransporter = () => {
   });
 
   return nodemailer.createTransport({
-    host: '74.125.130.108', // Direct IPv4 IP for smtp.gmail.com to bypass IPv6 resolution on cloud containers
-    port,
-    secure,
+    host: '74.125.130.108',
+    port: 465,
+    secure: true, // SMTPS TLS direct connection from packet start
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    servername: 'smtp.gmail.com', // Retain TLS SNI servername check for TLS handshake
+    servername: 'smtp.gmail.com',
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
