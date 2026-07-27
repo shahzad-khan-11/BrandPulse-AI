@@ -70,17 +70,19 @@ export const registerUser = async (req, res, next) => {
       isVerified: false,
     });
 
-    // 5. Send welcome and verification emails (awaited — Render requires completed async before response)
-    try {
-      await sendWelcomeEmail(user.email, user.name);
-    } catch (emailErr) {
-      logger.warn(`[AuthController] Welcome email failed for ${user.email}: ${emailErr.message}`);
-    }
-    try {
-      await sendVerificationEmail(user.email, verificationToken);
-    } catch (emailErr) {
-      logger.warn(`[AuthController] Verification email failed for ${user.email}: ${emailErr.message}`);
-    }
+    // 5. Send welcome and verification emails asynchronously in background
+    setImmediate(async () => {
+      try {
+        await sendWelcomeEmail(user.email, user.name);
+      } catch (emailErr) {
+        logger.warn(`[AuthController] Welcome email failed for ${user.email}: ${emailErr.message}`);
+      }
+      try {
+        await sendVerificationEmail(user.email, verificationToken);
+      } catch (emailErr) {
+        logger.warn(`[AuthController] Verification email failed for ${user.email}: ${emailErr.message}`);
+      }
+    });
 
     // 6. Generate session tokens
     const accessToken = generateAccessToken(user._id);
