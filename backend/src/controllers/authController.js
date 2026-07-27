@@ -6,6 +6,7 @@ import RoleRepository from '../repositories/RoleRepository.js';
 import OrganizationRepository from '../repositories/OrganizationRepository.js';
 import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
 import { pushNotification } from '../services/notificationService.js';
+import logger from '../config/logger.js';
 
 // JWT Generation Helpers
 const generateAccessToken = (id) => {
@@ -69,9 +70,17 @@ export const registerUser = async (req, res, next) => {
       isVerified: false,
     });
 
-    // 5. Send welcome and verification emails asynchronously
-    sendWelcomeEmail(user.email, user.name);
-    sendVerificationEmail(user.email, verificationToken);
+    // 5. Send welcome and verification emails (awaited — Render requires completed async before response)
+    try {
+      await sendWelcomeEmail(user.email, user.name);
+    } catch (emailErr) {
+      logger.warn(`[AuthController] Welcome email failed for ${user.email}: ${emailErr.message}`);
+    }
+    try {
+      await sendVerificationEmail(user.email, verificationToken);
+    } catch (emailErr) {
+      logger.warn(`[AuthController] Verification email failed for ${user.email}: ${emailErr.message}`);
+    }
 
     // 6. Generate session tokens
     const accessToken = generateAccessToken(user._id);
@@ -226,7 +235,11 @@ export const forgotPassword = async (req, res, next) => {
     user.resetPasswordExpire = Date.now() + 3600000; // 1 hour expiration
     await user.save();
 
-    sendPasswordResetEmail(user.email, resetToken);
+    try {
+      await sendPasswordResetEmail(user.email, resetToken);
+    } catch (emailErr) {
+      logger.warn(`[AuthController] Password reset email failed for ${user.email}: ${emailErr.message}`);
+    }
 
     res.json({ success: true, message: 'If email exists, a password reset link has been sent' });
   } catch (error) {
@@ -256,7 +269,11 @@ export const resetPassword = async (req, res, next) => {
     await user.save();
 
     // Send password reset success email and notification
-    sendPasswordResetSuccessEmail(user.email, user.name);
+    try {
+      await sendPasswordResetSuccessEmail(user.email, user.name);
+    } catch (emailErr) {
+      logger.warn(`[AuthController] Password reset success email failed for ${user.email}: ${emailErr.message}`);
+    }
     await pushNotification({
       userId: user._id,
       organizationId: user.organization,
