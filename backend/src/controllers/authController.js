@@ -4,7 +4,7 @@ import UserRepository from '../repositories/UserRepository.js';
 import RefreshTokenRepository from '../repositories/RefreshTokenRepository.js';
 import RoleRepository from '../repositories/RoleRepository.js';
 import OrganizationRepository from '../repositories/OrganizationRepository.js';
-import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
+import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail, EMAIL_SERVICE_BUILD } from '../services/emailService.js';
 import { pushNotification } from '../services/notificationService.js';
 import logger from '../config/logger.js';
 
@@ -235,13 +235,26 @@ export const forgotPassword = async (req, res, next) => {
     user.resetPasswordExpire = Date.now() + 3600000; // 1 hour expiration
     await user.save();
 
+    let emailResult = null;
+    let emailErrorMsg = null;
     try {
-      await sendPasswordResetEmail(user.email, resetToken);
+      emailResult = await sendPasswordResetEmail(user.email, resetToken);
     } catch (emailErr) {
+      emailErrorMsg = emailErr.message;
       logger.warn(`[AuthController] Password reset email failed for ${user.email}: ${emailErr.message}`);
     }
 
-    res.json({ success: true, message: 'If email exists, a password reset link has been sent' });
+    res.json({ 
+      success: true, 
+      message: 'If email exists, a password reset link has been sent',
+      emailDispatch: {
+        build: EMAIL_SERVICE_BUILD,
+        delivered: !!(emailResult && emailResult.messageId),
+        messageId: emailResult?.messageId || null,
+        smtpResponse: emailResult?.response || null,
+        error: emailErrorMsg
+      }
+    });
   } catch (error) {
     next(error);
   }
