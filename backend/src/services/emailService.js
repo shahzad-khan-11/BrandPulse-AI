@@ -36,14 +36,14 @@ const createTransporter = () => {
   });
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+    host: '74.125.130.108', // Direct IPv4 IP for smtp.gmail.com to bypass IPv6 resolution on cloud containers
     port,
     secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    family: 4,
+    servername: 'smtp.gmail.com', // Retain TLS SNI servername check for TLS handshake
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
@@ -51,7 +51,8 @@ const createTransporter = () => {
     debug: true,
     logger: true,
     tls: {
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
+      servername: 'smtp.gmail.com'
     }
   });
 };
