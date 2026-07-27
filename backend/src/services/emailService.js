@@ -95,7 +95,7 @@ const sendEmail = async (mailOptions, retries = 1) => {
       } else {
         logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 💀 All ${retries + 1} attempts failed for ${options.to}. Email NOT delivered.`);
         try { transporter.close(); } catch (_) {}
-        return false;
+        throw err;
       }
     }
   }
