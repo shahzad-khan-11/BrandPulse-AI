@@ -38,8 +38,9 @@ BrandPulse-AI/
 
 | Service | URL |
 |---------|-----|
-| **Frontend** (Vercel) | `https://brand-pulse-ai.vercel.app` |
-| **Backend** (Render)  | `https://brandpulse-backend.onrender.com` |
+| **Frontend** (Vercel) | https://brandpulse-ai-three.vercel.app |
+| **Backend** (Render)  | https://brandpulse-backend-lvo2.onrender.com |
+| **Health Check**      | https://brandpulse-backend-lvo2.onrender.com/health |
 
 ---
 
