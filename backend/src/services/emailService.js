@@ -1,23 +1,13 @@
 import nodemailer from 'nodemailer';
+import dns from 'dns';
 import logger from '../config/logger.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BrandPulse AI — Email Service
-// ─────────────────────────────────────────────────────────────────────────────
-// Fixed issues:
-//   1. Fire-and-forget emails (no await) → all callers must await
-//   2. Bare `from` address → now uses "BrandPulse AI <email>" display name
-//   3. Singleton transporter on Render's stateless env → create fresh per call
-//   4. SMTP_SECURE string coercion bug → explicitly parse boolean
-//   5. Missing retry logic → added 1 automatic retry on transient failure
-//   6. Silent swallowing of SMTP errors → all errors now logged with full detail
-//   7. No transporter.verify() on startup → added with detailed diagnostics
-// ─────────────────────────────────────────────────────────────────────────────
+export const EMAIL_SERVICE_BUILD = `v3-PROD-TRACE-${Date.now()}`;
+
+logger.info(`[EmailService] 🚀 INSTANTIATED EMAIL SERVICE BUILD IDENTIFIER: ${EMAIL_SERVICE_BUILD}`);
 
 /**
  * Creates a fresh Nodemailer transporter instance.
- * We create per-send (not singleton) because Render's free tier
- * closes idle TCP connections, breaking the cached singleton.
  */
 const createTransporter = () => {
   const requiredVars = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'];
@@ -25,7 +15,7 @@ const createTransporter = () => {
 
   if (missing.length > 0) {
     logger.error(
-      `[EmailService] ❌ Missing SMTP env vars: ${missing.join(', ')}. Email sending is DISABLED.`
+      `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ Missing SMTP env vars: ${missing.join(', ')}. Email sending is DISABLED.`
     );
     return null;
   }
@@ -34,46 +24,47 @@ const createTransporter = () => {
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   logger.info(
-    `[EmailService] Creating transporter: host=${process.env.SMTP_HOST} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
+    `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🛠️ Creating Transporter: node=${process.version} platform=${process.platform} host=${process.env.SMTP_HOST} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
   );
+
+  dns.lookup(process.env.SMTP_HOST, { all: true }, (err, addresses) => {
+    if (err) {
+      logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ DNS Lookup Error: ${err.message}`);
+    } else {
+      logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🌐 Resolved DNS for ${process.env.SMTP_HOST}: ${JSON.stringify(addresses)}`);
+    }
+  });
 
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
-    secure, // true = TLS on connect (port 465), false = STARTTLS (port 587)
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    family: 4, // Enforce IPv4 to avoid ENETUNREACH on cloud environments like Render
-    connectionTimeout: 10000, // 10s connection timeout
-    greetingTimeout: 10000,   // 10s EHLO greeting timeout
-    socketTimeout: 15000,     // 15s socket idle timeout
-    pool: false,              // Fresh socket connection per send (cloud container safe)
+    family: 4,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    pool: false,
+    debug: true,
+    logger: true,
     tls: {
-      rejectUnauthorized: false // Prevent self-signed cert chain blocks
+      rejectUnauthorized: false
     }
   });
 };
 
-/**
- * Verified display-name sender address.
- * Gmail requires the AUTH user to match the From address.
- */
 const getSender = () => {
   const emailAddr = process.env.SMTP_USER || process.env.EMAIL_FROM;
   if (!emailAddr) {
-    logger.error('[EmailService] ❌ Neither SMTP_USER nor EMAIL_FROM is set. Cannot send emails.');
+    logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ Neither SMTP_USER nor EMAIL_FROM is set.`);
     return null;
   }
   return `"BrandPulse AI" <${emailAddr}>`;
 };
 
-/**
- * Core send function with retry logic and full logging.
- * @param {object} mailOptions  - nodemailer mail options
- * @param {number} [retries=1]  - number of retries on transient failure
- */
 const sendEmail = async (mailOptions, retries = 1) => {
   const sender = getSender();
   if (!sender) return false;
@@ -83,26 +74,26 @@ const sendEmail = async (mailOptions, retries = 1) => {
 
   const options = { ...mailOptions, from: mailOptions.from || sender };
 
-  logger.info(`[EmailService] 📧 Sending "${options.subject}" → ${options.to}`);
+  logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] USING EMAIL SERVICE BUILD: ${EMAIL_SERVICE_BUILD} | 📧 Sending "${options.subject}" → ${options.to}`);
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
       const result = await transporter.sendMail(options);
       logger.info(
-        `[EmailService] ✅ Email delivered | to=${options.to} | subject="${options.subject}" | messageId=${result.messageId} | response=${result.response}`
+        `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ✅ Email delivered | to=${options.to} | subject="${options.subject}" | messageId=${result.messageId} | response=${result.response}`
       );
-      transporter.close();
+      try { transporter.close(); } catch (_) {}
       return result;
     } catch (err) {
       logger.error(
-        `[EmailService] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message} | code=${err.code} | responseCode=${err.responseCode}`
+        `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message} | code=${err.code} | responseCode=${err.responseCode} | command=${err.command}`
       );
       if (attempt <= retries) {
-        const delay = attempt * 2000; // 2s, 4s backoff
-        logger.info(`[EmailService] ⏳ Retrying in ${delay}ms...`);
+        const delay = attempt * 2000;
+        logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ⏳ Retrying in ${delay}ms...`);
         await new Promise((r) => setTimeout(r, delay));
       } else {
-        logger.error(`[EmailService] 💀 All ${retries + 1} attempts failed for ${options.to}. Email NOT delivered.`);
+        logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 💀 All ${retries + 1} attempts failed for ${options.to}. Email NOT delivered.`);
         try { transporter.close(); } catch (_) {}
         return false;
       }
