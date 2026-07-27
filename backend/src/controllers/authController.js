@@ -224,10 +224,19 @@ export const forgotPassword = async (req, res, next) => {
   const { email } = req.body;
 
   try {
-    const user = await UserRepository.model.findOne({ email }).select('+resetPasswordToken +resetPasswordExpire');
+    const user = await UserRepository.findByEmail(email);
     if (!user) {
       // Return 200 even if user not found for security reasons
-      return res.json({ success: true, message: 'If email exists, a password reset link has been sent' });
+      return res.json({ 
+        success: true, 
+        message: 'If email exists, a password reset link has been sent',
+        emailDispatch: {
+          build: EMAIL_SERVICE_BUILD,
+          userFound: false,
+          delivered: false,
+          error: 'User not found in MongoDB'
+        }
+      });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
