@@ -263,7 +263,14 @@ export const forgotPassword = async (req, res, next) => {
         delivered: !!(emailResult && emailResult.messageId),
         messageId: emailResult?.messageId || null,
         smtpResponse: emailResult?.response || null,
-        error: emailErrorMsg
+        error: emailErrorMsg,
+        envAudit: {
+          SMTP_HOST: process.env.SMTP_HOST,
+          SMTP_PORT: process.env.SMTP_PORT,
+          SMTP_SECURE: process.env.SMTP_SECURE,
+          SMTP_USER: process.env.SMTP_USER,
+          EMAIL_FROM: process.env.EMAIL_FROM
+        }
       }
     });
   } catch (error) {

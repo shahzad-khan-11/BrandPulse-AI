@@ -28,14 +28,6 @@ const createTransporter = () => {
     `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🛠️ Creating Transporter: node=${process.version} platform=${process.platform} host=${host} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
   );
 
-  dns.lookup(host, { all: true }, (err, addresses) => {
-    if (err) {
-      logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ DNS Lookup Error: ${err.message}`);
-    } else {
-      logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🌐 Resolved DNS for ${host}: ${JSON.stringify(addresses)}`);
-    }
-  });
-
   return nodemailer.createTransport({
     host,
     port,
@@ -45,9 +37,9 @@ const createTransporter = () => {
       pass: process.env.SMTP_PASS,
     },
     family: 4,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     pool: false,
     debug: true,
     logger: true,
