@@ -20,36 +20,40 @@ const createTransporter = () => {
     return null;
   }
 
-  const port = parseInt(process.env.SMTP_PORT, 10) || 465;
-  const secure = true;
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   logger.info(
-    `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🛠️ Creating Transporter: node=${process.version} platform=${process.platform} host=${process.env.SMTP_HOST} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
+    `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🛠️ Creating Transporter: node=${process.version} platform=${process.platform} host=${host} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
   );
 
-  dns.lookup(process.env.SMTP_HOST, { all: true }, (err, addresses) => {
+  dns.lookup(host, { all: true }, (err, addresses) => {
     if (err) {
       logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ DNS Lookup Error: ${err.message}`);
     } else {
-      logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🌐 Resolved DNS for ${process.env.SMTP_HOST}: ${JSON.stringify(addresses)}`);
+      logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🌐 Resolved DNS for ${host}: ${JSON.stringify(addresses)}`);
     }
   });
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
+    host,
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    family: 4, // Strict IPv4 socket resolution
-    connectionTimeout: 20000,
-    greetingTimeout: 20000,
-    socketTimeout: 30000,
+    family: 4,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     pool: false,
     debug: true,
-    logger: true
+    logger: true,
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 };
 
