@@ -36,24 +36,17 @@ const createTransporter = () => {
   });
 
   return nodemailer.createTransport({
-    host: '74.125.130.108',
-    port: 465,
-    secure: true, // SMTPS TLS direct connection from packet start
+    service: 'gmail',
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    servername: 'smtp.gmail.com',
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     pool: false,
     debug: true,
-    logger: true,
-    tls: {
-      rejectUnauthorized: false,
-      servername: 'smtp.gmail.com'
-    }
+    logger: true
   });
 };
 
