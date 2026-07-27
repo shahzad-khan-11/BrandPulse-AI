@@ -30,8 +30,8 @@ const createTransporter = () => {
     return null;
   }
 
-  const secure = process.env.SMTP_SECURE === 'true'; // Explicit boolean parse
   const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   logger.info(
     `[EmailService] Creating transporter: host=${process.env.SMTP_HOST} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
@@ -45,10 +45,14 @@ const createTransporter = () => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    family: 4, // Enforce IPv4 to avoid ENETUNREACH on cloud environments like Render
     connectionTimeout: 10000, // 10s connection timeout
     greetingTimeout: 10000,   // 10s EHLO greeting timeout
     socketTimeout: 15000,     // 15s socket idle timeout
-    pool: false,              // No pooling — fresh connection per send (Render-safe)
+    pool: false,              // Fresh socket connection per send (cloud container safe)
+    tls: {
+      rejectUnauthorized: false // Prevent self-signed cert chain blocks
+    }
   });
 };
 

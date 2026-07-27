@@ -52,8 +52,12 @@ export const updateProfile = async (req, res, next) => {
       runValidators: true,
     }).populate('organization');
 
-    // Send profile updated email notification
-    sendProfileUpdatedEmail(updatedUser.email, updatedUser.name);
+    // Send profile updated email notification safely
+    try {
+      await sendProfileUpdatedEmail(updatedUser.email, updatedUser.name);
+    } catch (emailErr) {
+      // Non-fatal email error
+    }
 
     res.json({ success: true, data: updatedUser });
   } catch (error) {
