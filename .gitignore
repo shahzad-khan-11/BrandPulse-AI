@@ -34,13 +34,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── Lock Files (optional — remove if you want to commit them) ─
-package-lock.json
-**/package-lock.json
-yarn.lock
-**/yarn.lock
-pnpm-lock.yaml
-**/pnpm-lock.yaml
+# ── Lock Files ─────────────────────────────────────────────
+# package-lock.json tracked for reproducible builds
 
 # ── Uploads (user-generated content, not for git) ─────────
 backend/uploads/
