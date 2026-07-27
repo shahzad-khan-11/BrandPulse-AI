@@ -43,6 +43,7 @@ const createTransporter = () => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    family: 4, // Strict IPv4 socket resolution
     connectionTimeout: 20000,
     greetingTimeout: 20000,
     socketTimeout: 30000,
