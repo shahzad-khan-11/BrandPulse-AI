@@ -1,10 +1,5 @@
 import nodemailer from 'nodemailer';
-import dns from 'dns';
 import logger from '../config/logger.js';
-
-export const EMAIL_SERVICE_BUILD = `v3-PROD-TRACE-${Date.now()}`;
-
-logger.info(`[EmailService] 🚀 INSTANTIATED EMAIL SERVICE BUILD IDENTIFIER: ${EMAIL_SERVICE_BUILD}`);
 
 /**
  * Creates a fresh Nodemailer transporter instance.
@@ -15,7 +10,7 @@ const createTransporter = () => {
 
   if (missing.length > 0) {
     logger.error(
-      `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ Missing SMTP env vars: ${missing.join(', ')}. Email sending is DISABLED.`
+      `[EmailService] ❌ Missing SMTP env vars: ${missing.join(', ')}. Email sending is DISABLED.`
     );
     return null;
   }
@@ -25,7 +20,7 @@ const createTransporter = () => {
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   logger.info(
-    `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 🛠️ Creating Transporter: node=${process.version} platform=${process.platform} host=${host} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
+    `[EmailService] 🛠️ Creating Transporter: host=${host} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
   );
 
   return nodemailer.createTransport({
@@ -41,8 +36,6 @@ const createTransporter = () => {
     greetingTimeout: 15000,
     socketTimeout: 20000,
     pool: false,
-    debug: true,
-    logger: true,
     tls: {
       rejectUnauthorized: false
     }
@@ -52,7 +45,7 @@ const createTransporter = () => {
 const getSender = () => {
   const emailAddr = process.env.SMTP_USER || process.env.EMAIL_FROM;
   if (!emailAddr) {
-    logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ Neither SMTP_USER nor EMAIL_FROM is set.`);
+    logger.error('[EmailService] ❌ Neither SMTP_USER nor EMAIL_FROM is set.');
     return null;
   }
   return `"BrandPulse AI" <${emailAddr}>`;
@@ -67,26 +60,26 @@ const sendEmail = async (mailOptions, retries = 1) => {
 
   const options = { ...mailOptions, from: mailOptions.from || sender };
 
-  logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] USING EMAIL SERVICE BUILD: ${EMAIL_SERVICE_BUILD} | 📧 Sending "${options.subject}" → ${options.to}`);
+  logger.info(`[EmailService] 📧 Sending "${options.subject}" → ${options.to}`);
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
       const result = await transporter.sendMail(options);
       logger.info(
-        `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ✅ Email delivered | to=${options.to} | subject="${options.subject}" | messageId=${result.messageId} | response=${result.response}`
+        `[EmailService] ✅ Email delivered | to=${options.to} | subject="${options.subject}" | messageId=${result.messageId} | response=${result.response}`
       );
       try { transporter.close(); } catch (_) {}
       return result;
     } catch (err) {
       logger.error(
-        `[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message} | code=${err.code} | responseCode=${err.responseCode} | command=${err.command}`
+        `[EmailService] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message} | code=${err.code}`
       );
       if (attempt <= retries) {
         const delay = attempt * 2000;
-        logger.info(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] ⏳ Retrying in ${delay}ms...`);
+        logger.info(`[EmailService] ⏳ Retrying in ${delay}ms...`);
         await new Promise((r) => setTimeout(r, delay));
       } else {
-        logger.error(`[EmailService BUILD: ${EMAIL_SERVICE_BUILD}] 💀 All ${retries + 1} attempts failed for ${options.to}. Email NOT delivered.`);
+        logger.error(`[EmailService] 💀 All ${retries + 1} attempts failed for ${options.to}. Email NOT delivered.`);
         try { transporter.close(); } catch (_) {}
         throw err;
       }
