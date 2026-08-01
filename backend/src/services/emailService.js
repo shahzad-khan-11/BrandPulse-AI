@@ -350,3 +350,22 @@ export const sendCustomEmail = async (email, subject, contentHtml, attachments =
     attachments,
   });
 };
+
+/**
+ * Contact form submission notification — sent to support/admin
+ */
+export const sendContactEmail = async (name, senderEmail, subject, message) => {
+  const adminEmail = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
+      New Contact Form Submission 📩
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 8px;"><strong style="color:#e2e8f0;">Name:</strong> ${name}</p>
+    <p style="color:#94a3b8;margin:0 0 8px;"><strong style="color:#e2e8f0;">Email:</strong> ${senderEmail}</p>
+    <p style="color:#94a3b8;margin:0 0 16px;"><strong style="color:#e2e8f0;">Subject:</strong> ${subject}</p>
+    <div style="background-color:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin:16px 0;color:#cbd5e1;">
+      ${message}
+    </div>
+  `;
+  return sendEmail({ to: adminEmail, subject: `[Contact Form] ${subject}`, html: wrapTemplate(content) });
+};

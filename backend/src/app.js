@@ -26,6 +26,7 @@ import executiveReportRoutes from './routes/executiveReportRoutes.js';
 import assistantRoutes from './routes/assistantRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import newsRoutes from './routes/newsRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use('/api/executive-reports', executiveReportRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/news', newsRoutes);
+app.use('/api/contact', contactRoutes);
 
 // Setup Swagger Documentation
 setupSwagger(app);
