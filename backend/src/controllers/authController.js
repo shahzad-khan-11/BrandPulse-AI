@@ -246,11 +246,14 @@ export const forgotPassword = async (req, res, next) => {
     user.resetPasswordExpire = Date.now() + 3600000; // 1 hour expiration
     await user.save();
 
-    try {
-      await sendPasswordResetEmail(user.email, resetToken);
-    } catch (emailErr) {
-      logger.warn(`[AuthController] Password reset email failed for ${user.email}: ${emailErr.message}`);
-    }
+    // Dispatch password reset email in background non-blocking
+    setImmediate(async () => {
+      try {
+        await sendPasswordResetEmail(user.email, resetToken);
+      } catch (emailErr) {
+        logger.warn(`[AuthController] Password reset email failed for ${user.email}: ${emailErr.message}`);
+      }
+    });
 
     res.json({ 
       success: true, 
