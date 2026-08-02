@@ -1,92 +1,55 @@
-import dns from 'dns';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import logger from '../config/logger.js';
 
-/**
- * Creates a fresh Nodemailer transporter instance.
- */
-const createTransporter = () => {
-  const requiredVars = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'];
-  const missing = requiredVars.filter((k) => !process.env[k]);
+let resendClient = null;
 
-  if (missing.length > 0) {
-    logger.error(
-      `[EmailService] ❌ Missing SMTP env vars: ${missing.join(', ')}. Email sending is DISABLED.`
-    );
+const getResendClient = () => {
+  if (!process.env.RESEND_API_KEY) {
+    logger.error('[EmailService] ❌ RESEND_API_KEY environment variable is not set. Email sending is DISABLED.');
     return null;
   }
-
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT, 10) || 587;
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-  logger.info(
-    `[EmailService] 🛠️ Creating Transporter: host=${host} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
-  );
-
-  // Custom IPv4 lookup to prevent Node/Nodemailer from resolving IPv6 on cloud providers like Render
-  const ipv4Lookup = (hostname, options, callback) => {
-    if (typeof options === 'function') {
-      callback = options;
-      options = {};
-    }
-    dns.resolve4(hostname, (err, addresses) => {
-      if (err || !addresses || addresses.length === 0) {
-        return dns.lookup(hostname, options, callback);
-      }
-      if (options.all) {
-        return callback(null, addresses.map((a) => ({ address: a, family: 4 })));
-      }
-      return callback(null, addresses[0], 4);
-    });
-  };
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    lookup: ipv4Lookup,
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 20000,
-  });
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
 };
 
 const getSender = () => {
-  const emailAddr = process.env.SMTP_USER || process.env.EMAIL_FROM;
-  if (!emailAddr) {
-    logger.error('[EmailService] ❌ Neither SMTP_USER nor EMAIL_FROM is set.');
-    return null;
-  }
-  return `"BrandPulse AI" <${emailAddr}>`;
+  const emailAddr = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+  return `BrandPulse AI <${emailAddr}>`;
 };
 
 const sendEmail = async (mailOptions, retries = 1) => {
+  const resend = getResendClient();
+  if (!resend) return false;
+
   const sender = getSender();
-  if (!sender) return false;
+  const options = {
+    from: mailOptions.from || sender,
+    to: mailOptions.to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+  };
 
-  const transporter = createTransporter();
-  if (!transporter) return false;
+  if (mailOptions.attachments && mailOptions.attachments.length > 0) {
+    options.attachments = mailOptions.attachments;
+  }
 
-  const options = { ...mailOptions, from: mailOptions.from || sender };
-
-  logger.info(`[EmailService] 📧 Sending "${options.subject}" → ${options.to}`);
+  logger.info(`[EmailService] 📧 Sending via Resend API "${options.subject}" → ${options.to}`);
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
-      const result = await transporter.sendMail(options);
+      const { data, error } = await resend.emails.send(options);
+      if (error) {
+        throw new Error(error.message || JSON.stringify(error));
+      }
       logger.info(
-        `[EmailService] ✅ Email delivered | to=${options.to} | subject="${options.subject}" | messageId=${result.messageId} | response=${result.response}`
+        `[EmailService] ✅ Email delivered via Resend | to=${options.to} | subject="${options.subject}" | id=${data?.id}`
       );
-      try { transporter.close(); } catch (_) {}
-      return result;
+      return data;
     } catch (err) {
       logger.error(
-        `[EmailService] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message} | code=${err.code}`
+        `[EmailService] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message}`
       );
       if (attempt <= retries) {
         const delay = attempt * 2000;
@@ -94,35 +57,9 @@ const sendEmail = async (mailOptions, retries = 1) => {
         await new Promise((r) => setTimeout(r, delay));
       } else {
         logger.error(`[EmailService] 💀 All ${retries + 1} attempts failed for ${options.to}. Email NOT delivered.`);
-        try { transporter.close(); } catch (_) {}
         throw err;
       }
     }
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Startup SMTP Verification
-// Called once at server boot to validate credentials before any email is sent.
-// ─────────────────────────────────────────────────────────────────────────────
-export const verifySmtpConnection = async () => {
-  const transporter = createTransporter();
-  if (!transporter) {
-    logger.error('[EmailService] ❌ SMTP verification skipped — transporter could not be created.');
-    return false;
-  }
-  try {
-    await transporter.verify();
-    logger.info('[EmailService] ✅ SMTP connection verified successfully. Email delivery is ENABLED.');
-    transporter.close();
-    return true;
-  } catch (err) {
-    logger.error(
-      `[EmailService] ❌ SMTP verification FAILED: ${err.message} | code=${err.code} | responseCode=${err.responseCode}`
-    );
-    logger.error('[EmailService] ⚠️  Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and Gmail App Password.');
-    try { transporter.close(); } catch (_) {}
-    return false;
   }
 };
 
@@ -369,7 +306,7 @@ export const sendCustomEmail = async (email, subject, contentHtml, attachments =
  * Contact form submission notification — sent to support/admin
  */
 export const sendContactEmail = async (name, senderEmail, subject, message) => {
-  const adminEmail = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  const adminEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
   const content = `
     <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
       New Contact Form Submission 📩
