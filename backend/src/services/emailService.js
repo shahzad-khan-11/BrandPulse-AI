@@ -1,3 +1,4 @@
+import dns from 'dns';
 import nodemailer from 'nodemailer';
 import logger from '../config/logger.js';
 
@@ -23,6 +24,23 @@ const createTransporter = () => {
     `[EmailService] 🛠️ Creating Transporter: host=${host} port=${port} secure=${secure} user=${process.env.SMTP_USER}`
   );
 
+  // Custom IPv4 lookup to prevent Node/Nodemailer from resolving IPv6 on cloud providers like Render
+  const ipv4Lookup = (hostname, options, callback) => {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+    dns.resolve4(hostname, (err, addresses) => {
+      if (err || !addresses || addresses.length === 0) {
+        return dns.lookup(hostname, options, callback);
+      }
+      if (options.all) {
+        return callback(null, addresses.map((a) => ({ address: a, family: 4 })));
+      }
+      return callback(null, addresses[0], 4);
+    });
+  };
+
   return nodemailer.createTransport({
     host,
     port,
@@ -31,14 +49,10 @@ const createTransporter = () => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    family: 4,
+    lookup: ipv4Lookup,
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 20000,
-    pool: false,
-    tls: {
-      rejectUnauthorized: false
-    }
   });
 };
 

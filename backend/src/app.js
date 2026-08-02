@@ -30,6 +30,9 @@ import contactRoutes from './routes/contactRoutes.js';
 
 const app = express();
 
+// Trust proxy for reverse proxy platforms like Render (resolves ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet({
   crossOriginResourcePolicy: false, // Allows static uploads to be loaded in frontend

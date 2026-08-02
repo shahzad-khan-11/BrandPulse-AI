@@ -70,19 +70,17 @@ export const registerUser = async (req, res, next) => {
       isVerified: false,
     });
 
-    // 5. Send welcome and verification emails asynchronously in background
-    setImmediate(async () => {
-      try {
-        await sendWelcomeEmail(user.email, user.name);
-      } catch (emailErr) {
-        logger.warn(`[AuthController] Welcome email failed for ${user.email}: ${emailErr.message}`);
-      }
-      try {
-        await sendVerificationEmail(user.email, verificationToken);
-      } catch (emailErr) {
-        logger.warn(`[AuthController] Verification email failed for ${user.email}: ${emailErr.message}`);
-      }
-    });
+    // 5. Send welcome and verification emails
+    try {
+      await sendWelcomeEmail(user.email, user.name);
+    } catch (emailErr) {
+      logger.error(`[AuthController] Welcome email failed for ${user.email}: ${emailErr.message}`);
+    }
+    try {
+      await sendVerificationEmail(user.email, verificationToken);
+    } catch (emailErr) {
+      logger.error(`[AuthController] Verification email failed for ${user.email}: ${emailErr.message}`);
+    }
 
     // 6. Generate session tokens
     const accessToken = generateAccessToken(user._id);
@@ -231,13 +229,7 @@ export const forgotPassword = async (req, res, next) => {
       // Return 200 even if user not found for security reasons
       return res.json({ 
         success: true, 
-        message: 'If email exists, a password reset link has been sent',
-        emailDispatch: {
-          build: EMAIL_SERVICE_BUILD,
-          userFound: false,
-          delivered: false,
-          error: 'User not found in MongoDB'
-        }
+        message: 'If email exists, a password reset link has been sent'
       });
     }
 
@@ -246,14 +238,12 @@ export const forgotPassword = async (req, res, next) => {
     user.resetPasswordExpire = Date.now() + 3600000; // 1 hour expiration
     await user.save();
 
-    // Dispatch password reset email in background non-blocking
-    setImmediate(async () => {
-      try {
-        await sendPasswordResetEmail(user.email, resetToken);
-      } catch (emailErr) {
-        logger.warn(`[AuthController] Password reset email failed for ${user.email}: ${emailErr.message}`);
-      }
-    });
+    // Dispatch password reset email
+    try {
+      await sendPasswordResetEmail(user.email, resetToken);
+    } catch (emailErr) {
+      logger.error(`[AuthController] Password reset email failed for ${user.email}: ${emailErr.message}`);
+    }
 
     res.json({ 
       success: true, 
