@@ -60,6 +60,8 @@ const Mentions: React.FC = () => {
   const [source, setSource] = useState('');
   const [sentiment, setSentiment] = useState('');
   const [priority, setPriority] = useState('');
+  const [languageFilter, setLanguageFilter] = useState('');
+  const [dataMode, setDataMode] = useState<'all' | 'live' | 'demo'>('all');
   const [city, setCity] = useState('');
   const [citiesList, setCitiesList] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -103,6 +105,12 @@ const Mentions: React.FC = () => {
       let query = `?page=${page}&limit=6`;
       if (source) query += `&source=${source}`;
       if (sentiment) query += `&sentiment=${sentiment}`;
+      if (priority) query += `&priority=${priority}`;
+      if (languageFilter) query += `&language=${languageFilter}`;
+      if (city) query += `&city=${city}`;
+      if (search) query += `&search=${encodeURIComponent(search)}`;
+      if (dataMode === 'demo') query += `&isDemo=true`;
+      if (dataMode === 'live') query += `&isDemo=false`;
       if (priority) query += `&priority=${priority}`;
       if (city) query += `&city=${city}`;
       if (search) query += `&search=${encodeURIComponent(search)}`;
@@ -242,15 +250,36 @@ const Mentions: React.FC = () => {
           </select>
 
           <select
+            value={dataMode}
+            onChange={(e) => setDataMode(e.target.value as any)}
+            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold focus:ring-1 focus:ring-indigo-500 text-indigo-400 outline-none cursor-pointer"
+          >
+            <option value="all" className="bg-slate-900 text-slate-200">Mode: All Feeds</option>
+            <option value="live" className="bg-slate-900 text-slate-200">Mode: Live Data Only</option>
+            <option value="demo" className="bg-slate-900 text-slate-200">Mode: Demo Dataset</option>
+          </select>
+
+          <select
+            value={languageFilter}
+            onChange={(e) => setLanguageFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold focus:ring-1 focus:ring-indigo-500 text-slate-200 outline-none cursor-pointer"
+          >
+            <option value="" className="bg-slate-900 text-slate-200">All Languages</option>
+            <option value="English" className="bg-slate-900 text-slate-200">English</option>
+            <option value="Hindi" className="bg-slate-900 text-slate-200">Hindi</option>
+            <option value="Hinglish" className="bg-slate-900 text-slate-200">Hinglish</option>
+          </select>
+
+          <select
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
             className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold focus:ring-1 focus:ring-indigo-500 text-slate-200 outline-none cursor-pointer"
           >
-            <option value="" className="bg-slate-900 text-slate-200">All Priorities</option>
-            <option value="critical" className="bg-slate-900 text-slate-200">Critical</option>
-            <option value="high" className="bg-slate-900 text-slate-200">High</option>
-            <option value="medium" className="bg-slate-900 text-slate-200">Medium</option>
-            <option value="low" className="bg-slate-900 text-slate-200">Low</option>
+            <option value="" className="bg-slate-900 text-slate-200">All Priority</option>
+            <option value="critical" className="bg-slate-900 text-slate-200">Critical Priority</option>
+            <option value="high" className="bg-slate-900 text-slate-200">High Priority</option>
+            <option value="medium" className="bg-slate-900 text-slate-200">Medium Priority</option>
+            <option value="low" className="bg-slate-900 text-slate-200">Low Priority</option>
           </select>
 
           <select
@@ -265,6 +294,23 @@ const Mentions: React.FC = () => {
               </option>
             ))}
           </select>
+          <button
+            onClick={async () => {
+              if (!selectedBrandId) return;
+              try {
+                const res = await api.post(`/mentions/brand/${selectedBrandId}/seed-demo`);
+                if (res.data.success) {
+                  fetchMentions();
+                }
+              } catch (err) {
+                console.error('Seed demo dataset failed:', err);
+              }
+            }}
+            className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Seed Demo Dataset
+          </button>
         </div>
       </div>
 

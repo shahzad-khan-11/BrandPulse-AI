@@ -9,7 +9,8 @@ import {
   getSpamFakeMentions,
   updateClassification,
   generateMentionReply,
-  sendMentionReply
+  sendMentionReply,
+  seedDemoMentions
 } from '../controllers/mentionController.js';
 import protect from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
@@ -32,6 +33,7 @@ router.route('/brand/:brandId')
   .post(validate(createMentionSchema), createMention);
 
 router.post('/brand/:brandId/sync', syncBrandMentions);
+router.post('/brand/:brandId/seed-demo', seedDemoMentions);
 router.get('/brand/:brandId/metrics', getSentimentMetrics);
 
 export default router;

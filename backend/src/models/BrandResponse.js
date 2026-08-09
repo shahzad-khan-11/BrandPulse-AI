@@ -31,9 +31,18 @@ const brandResponseSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['DRAFT', 'APPROVED', 'SENT', 'FAILED'],
+      enum: ['DRAFT', 'GENERATED', 'EDITED', 'APPROVED', 'DISPATCHING', 'SENT', 'SIMULATED', 'FAILED'],
       default: 'DRAFT',
       index: true,
+    },
+    mode: {
+      type: String,
+      enum: ['LIVE', 'DEMO'],
+      default: 'LIVE',
+    },
+    isDemo: {
+      type: Boolean,
+      default: false,
     },
     sentAt: {
       type: Date,

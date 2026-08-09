@@ -167,6 +167,16 @@ const brandMentionSchema = new mongoose.Schema(
       default: '',
       index: true,
     },
+    isDemo: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    dataSource: {
+      type: String,
+      default: 'live',
+      index: true,
+    },
   },
   {
     timestamps: true,

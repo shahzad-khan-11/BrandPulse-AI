@@ -51,6 +51,12 @@ const brandSchema = new mongoose.Schema(
       default: 'North India',
       index: true,
     },
+    country: {
+      type: String,
+      trim: true,
+      default: 'India',
+      index: true,
+    },
     language: {
       type: String,
       default: 'Hindi',

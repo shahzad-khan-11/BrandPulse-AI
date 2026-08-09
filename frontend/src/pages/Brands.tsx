@@ -9,6 +9,7 @@ interface Brand {
   city?: string;
   state?: string;
   region?: string;
+  country?: string;
   language?: string;
 }
 

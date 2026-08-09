@@ -15,28 +15,30 @@ import logger from '../config/logger.js';
 // @access  Private
 export const getMentions = async (req, res, next) => {
   const { brandId } = req.params;
-  const { source, sentiment, language, search, priority, city, page, limit, sort } = req.query;
+    const { source, sentiment, language, search, priority, city, isDemo, dataSource, page, limit, sort } = req.query;
 
-  try {
-    // Verify brand ownership scope
-    const brand = await BrandRepository.findOne({
-      _id: brandId,
-      organization: req.user.organization,
-    });
-    if (!brand) {
-      return res.status(404).json({ success: false, message: 'Brand not found' });
-    }
+    try {
+      // Verify brand ownership scope
+      const brand = await BrandRepository.findOne({
+        _id: brandId,
+        organization: req.user.organization,
+      });
+      if (!brand) {
+        return res.status(404).json({ success: false, message: 'Brand not found' });
+      }
 
-    const filters = { brand: brandId };
+      const filters = { brand: brandId };
 
-    if (source) filters.source = source;
-    if (sentiment) filters.sentiment = sentiment;
-    if (language) filters.language = language;
-    if (priority) filters.priority = priority;
-    if (city) filters['location.city'] = city;
-    if (search) {
-      filters.content = { $regex: search, $options: 'i' };
-    }
+      if (source) filters.source = source;
+      if (sentiment) filters.sentiment = sentiment;
+      if (language) filters.language = language;
+      if (priority) filters.priority = priority;
+      if (city) filters['location.city'] = city;
+      if (isDemo !== undefined && isDemo !== '') filters.isDemo = isDemo === 'true';
+      if (dataSource) filters.dataSource = dataSource;
+      if (search) {
+        filters.content = { $regex: search, $options: 'i' };
+      }
 
     const results = await BrandMentionRepository.paginate(filters, { page, limit, sort });
     res.json({
@@ -599,6 +601,159 @@ export const syncBrandMentions = async (req, res, next) => {
   }
 };
 
+// @desc    Seed realistic demo dataset for demo mode
+// @route   POST /api/mentions/brand/:brandId/seed-demo
+// @access  Private
+export const seedDemoMentions = async (req, res, next) => {
+  const { brandId } = req.params;
+
+  try {
+    const brand = await BrandRepository.findOne({ _id: brandId, organization: req.user.organization });
+    if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
+
+    const demoSamples = [
+      {
+        content: `Outstanding product quality and ultra-fast delivery from ${brand.name} in Patna! Absolutely loving the customer experience. #Satisfaction #${brand.name.replace(/\s+/g, '')}`,
+        author: 'Aarav Sharma',
+        source: 'x',
+        sentiment: 'positive',
+        sentimentScore: 0.9,
+        language: 'English',
+        emotion: 'joy',
+        priority: 'low',
+        priorityReason: 'Positive review with high customer satisfaction score.',
+        aiClassification: 'GENUINE',
+        aiConfidence: 0.95,
+        aiReason: 'Authentic user review with specific location markers.',
+        location: { city: 'Patna', state: 'Bihar', country: 'India', sourcePlatform: 'X' },
+        hashtags: [`#${brand.name.replace(/\s+/g, '')}`, '#Satisfaction', '#Patna'],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
+        content: `${brand.name} ka service bilkul khrab hai Patna me, delivery delayed by 4 days without any response! #DeliveryFail #${brand.name.replace(/\s+/g, '')}`,
+        author: 'Vikram Singh',
+        source: 'twitter',
+        sentiment: 'negative',
+        sentimentScore: -0.85,
+        language: 'Hinglish',
+        emotion: 'frustration',
+        priority: 'high',
+        priorityReason: 'Repeated delivery delay complaints affecting brand reputation in Patna.',
+        aiClassification: 'GENUINE',
+        aiConfidence: 0.92,
+        aiReason: 'Genuine customer complaint expressing dissatisfaction in Hinglish.',
+        location: { city: 'Patna', state: 'Bihar', country: 'India', sourcePlatform: 'Twitter' },
+        hashtags: [`#${brand.name.replace(/\s+/g, '')}`, '#DeliveryFail', '#Patna'],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
+        content: `${brand.name} के उत्पाद दिल्ली में बहुत ही घटिया हैं। कस्टमर केयर कोई जवाब नहीं दे रहा है। #DelhiComplaints`,
+        author: 'Priya Verma',
+        source: 'facebook',
+        sentiment: 'negative',
+        sentimentScore: -0.95,
+        language: 'Hindi',
+        emotion: 'anger',
+        priority: 'critical',
+        priorityReason: 'Critical customer complaint in Delhi requiring immediate brand safety team intervention.',
+        aiClassification: 'GENUINE',
+        aiConfidence: 0.96,
+        aiReason: 'Authentic customer complaint in Devanagari Hindi script.',
+        location: { city: 'Delhi', state: 'Delhi', country: 'India', sourcePlatform: 'Facebook' },
+        hashtags: ['#DelhiComplaints', `#${brand.name.replace(/\s+/g, '')}`],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
+        content: `Win $10,000 cash prize now! Click here to claim instant discount coupons for ${brand.name}!! http://bit.ly/spamlink`,
+        author: 'PromoBot99',
+        source: 'news',
+        sentiment: 'neutral',
+        sentimentScore: 0.0,
+        language: 'English',
+        emotion: 'neutral',
+        priority: 'low',
+        priorityReason: 'Automated promotional clickbait spam.',
+        aiClassification: 'SPAM',
+        aiConfidence: 0.98,
+        aiReason: 'Automated referral spam detected with URL redirect link.',
+        location: { city: 'Mumbai', state: 'Maharashtra', country: 'India', sourcePlatform: 'Web' },
+        hashtags: ['#FreeGiveaway', '#Promo'],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
+        content: `${brand.name} is the worst brand ever! Don't buy anything! ${brand.name} is fake! ${brand.name} scammed me!`,
+        author: 'UnknownUser123',
+        source: 'google_reviews',
+        sentiment: 'negative',
+        sentimentScore: -0.9,
+        language: 'English',
+        emotion: 'anger',
+        priority: 'medium',
+        priorityReason: 'Coordinated negative review pattern.',
+        aiClassification: 'POTENTIALLY_FAKE',
+        aiConfidence: 0.91,
+        aiReason: 'Repeated keyword stuffing pattern typical of coordinated bot campaigns.',
+        location: { city: 'Delhi', state: 'Delhi', country: 'India', sourcePlatform: 'Google Reviews' },
+        hashtags: [`#${brand.name.replace(/\s+/g, '')}`],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
+        content: `Checking out the new store location for ${brand.name} in Bengaluru! Excellent interior design and helpful staff. #Bengaluru #Retail`,
+        author: 'Rohan Mehta',
+        source: 'instagram',
+        sentiment: 'positive',
+        sentimentScore: 0.88,
+        language: 'English',
+        emotion: 'joy',
+        priority: 'low',
+        priorityReason: 'Positive brand opening mention.',
+        aiClassification: 'GENUINE',
+        aiConfidence: 0.94,
+        aiReason: 'Legitimate store visit review with location photos.',
+        location: { city: 'Bengaluru', state: 'Karnataka', country: 'India', sourcePlatform: 'Instagram' },
+        hashtags: ['#Bengaluru', '#Retail', `#${brand.name.replace(/\s+/g, '')}`],
+        isDemo: true,
+        dataSource: 'demo',
+      }
+    ];
+
+    const createdMentions = [];
+    for (const sample of demoSamples) {
+      const doc = await BrandMentionRepository.create({
+        ...sample,
+        brand: brandId,
+        publishedAt: new Date(),
+        aiAnalysis: {
+          keyThemes: ['Product Quality', 'Customer Experience'],
+          emotionalTone: sample.emotion,
+          suggestedAction: sample.sentiment === 'negative' ? 'Contact customer directly to resolve issue' : 'Acknowledge feedback with thank-you message',
+          explanation: sample.aiReason,
+          suggestedReplies: {
+            hindiReply: `नमस्ते! ${brand.name} के संबंध में आपकी प्रतिक्रिया के लिए धन्यवाद।`,
+            englishReply: `Thank you for sharing your feedback regarding ${brand.name}!`,
+            friendlyReply: `Thanks so much for the love! We appreciate your support for ${brand.name}!`,
+            professionalReply: `Dear customer, thank you for contacting ${brand.name}. Our support team is actively addressing your feedback.`
+          }
+        }
+      });
+      createdMentions.push(doc);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Seeded ${createdMentions.length} realistic demo mentions for ${brand.name}`,
+      data: createdMentions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get priority classified mentions
 // @route   GET /api/mentions/priority
 // @access  Private
@@ -745,7 +900,7 @@ export const generateMentionReply = async (req, res, next) => {
 // @access  Private
 export const sendMentionReply = async (req, res, next) => {
   const { id } = req.params;
-  const { content, status = 'DRAFT' } = req.body;
+  const { content, status = 'DRAFT', mode = 'LIVE' } = req.body;
 
   if (!content) return res.status(400).json({ success: false, message: 'Reply content is required' });
 
@@ -758,12 +913,17 @@ export const sendMentionReply = async (req, res, next) => {
 
     let finalStatus = status;
     let errorMsg = '';
+    let isDemo = mode === 'DEMO' || mention.isDemo;
 
     if (status === 'SENT') {
-      // Official external platform APIs (Twitter/X API, Google Business API) are not connected in this project setup.
-      // In accordance with instructions: Never fake external platform sending.
-      finalStatus = 'FAILED';
-      errorMsg = 'Platform integration not configured. Official external platform API is not connected to dispatch reply directly.';
+      if (isDemo) {
+        finalStatus = 'SIMULATED';
+        errorMsg = 'Demo Mode - simulated platform response dispatched successfully.';
+      } else {
+        // Official external platform APIs (Twitter/X API, Google Business API) are not connected in live mode.
+        finalStatus = 'FAILED';
+        errorMsg = 'Platform integration not configured. Official external platform API is not connected to dispatch reply directly.';
+      }
     }
 
     const responseDoc = await BrandResponse.create({
@@ -773,15 +933,19 @@ export const sendMentionReply = async (req, res, next) => {
       platform: mention.source || 'web',
       content,
       status: finalStatus,
-      sentAt: finalStatus === 'SENT' ? new Date() : null,
+      mode: isDemo ? 'DEMO' : 'LIVE',
+      isDemo,
+      sentAt: (finalStatus === 'SENT' || finalStatus === 'SIMULATED') ? new Date() : null,
       error: errorMsg,
     });
 
     res.status(201).json({
       success: true,
-      message: finalStatus === 'FAILED' 
-        ? 'Reply saved. Platform integration not configured. Official platform API required to deliver automatically.' 
-        : 'Reply response record saved successfully.',
+      message: finalStatus === 'SIMULATED'
+        ? 'Demo Mode: Simulated platform reply dispatched successfully.'
+        : (finalStatus === 'FAILED' 
+          ? 'Reply saved. Platform integration not configured. Official platform API required to deliver automatically.' 
+          : 'Reply response record saved successfully.'),
       data: responseDoc,
     });
   } catch (error) {
