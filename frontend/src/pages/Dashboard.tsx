@@ -4,6 +4,7 @@ import api from '../services/api';
 import { SentimentAreaChart } from '../components/AnalyticsCharts';
 import { useAuth } from '../hooks/useAuth';
 import { EnterpriseDrawer } from '../components/EnterpriseOverlays';
+import IntelligenceModule from '../components/IntelligenceModule';
 import {
   Building, 
   RefreshCw, 
@@ -2762,6 +2763,9 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
 
         </div>
       </EnterpriseDrawer>
+
+      {/* Advanced Brand Intelligence Suite Section */}
+      <IntelligenceModule />
 
       {/* Floating Interactive Toast */}
       {toastMessage && (

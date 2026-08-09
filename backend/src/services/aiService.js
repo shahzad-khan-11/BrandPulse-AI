@@ -239,3 +239,106 @@ export const analyzeRegionalContent = async (content) => {
     }
   };
 };
+
+/**
+ * Evaluates mention for spam/fake classification and priority reasoning
+ */
+export const analyzeSpamAndPriority = async (content, sentiment) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'PLACEHOLDER' || apiKey.startsWith('your_')) {
+    const lowercase = (content || '').toLowerCase();
+    let aiClassification = 'GENUINE';
+    let aiReason = 'Content passed local authenticity heuristic checks.';
+    let aiConfidence = 0.9;
+    
+    if (lowercase.includes('click here') || lowercase.includes('free followers') || lowercase.includes('buy bitcoin')) {
+      aiClassification = 'SPAM';
+      aiReason = 'Repeated promotional link spam patterns detected.';
+      aiConfidence = 0.95;
+    } else if (lowercase.includes('fake review') || lowercase.includes('paid review') || lowercase.includes('bot review')) {
+      aiClassification = 'POTENTIALLY_FAKE';
+      aiReason = 'Unnatural review language or bot pattern detected.';
+      aiConfidence = 0.85;
+    }
+
+    return { aiClassification, aiConfidence, aiReason };
+  }
+
+  try {
+    const client = getGenAIClient();
+    const model = client.getGenerativeModel({
+      model: 'gemini-3.1-flash-lite',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+
+    const prompt = `
+      You are an AI brand authenticity & spam detector.
+      Analyze this mention:
+      "${content.replace(/"/g, '\\"')}"
+
+      Classify as:
+      - "GENUINE": authentic user feedback, mention, or review
+      - "POTENTIALLY_FAKE": suspicious bot review, unnatural campaign, or deceptive content
+      - "SPAM": link spam, automated promotional text, or irrelvant filler
+
+      Return JSON:
+      {
+        "aiClassification": "GENUINE" | "POTENTIALLY_FAKE" | "SPAM",
+        "aiConfidence": float 0.0-1.0,
+        "aiReason": "One-sentence explanation"
+      }
+    `;
+
+    const result = await geminiQueue.enqueue(() => model.generateContent(prompt), { label: 'Spam Analysis' });
+    const parsed = JSON.parse(result.response.text());
+    return {
+      aiClassification: ['GENUINE', 'POTENTIALLY_FAKE', 'SPAM'].includes(parsed.aiClassification) ? parsed.aiClassification : 'GENUINE',
+      aiConfidence: parsed.aiConfidence || 0.9,
+      aiReason: parsed.aiReason || 'Analyzed by BrandPulse AI'
+    };
+  } catch (error) {
+    logger.error(`[AI Service] Spam analysis failed: ${error.message}`);
+    return { aiClassification: 'GENUINE', aiConfidence: 0.8, aiReason: 'Default fallback classification.' };
+  }
+};
+
+/**
+ * Generates an AI reply to a brand mention based on context, sentiment, and language.
+ */
+export const generateAIReply = async ({ content, sentiment, language, brandName, tone = 'professional' }) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'PLACEHOLDER' || apiKey.startsWith('your_')) {
+    if (sentiment === 'negative') {
+      return `Dear customer, thank you for sharing your feedback regarding ${brandName}. We apologize for any inconvenience caused and our team is looking into this issue immediately.`;
+    }
+    return `Hello! Thank you so much for your support for ${brandName}. We are delighted to hear your feedback!`;
+  }
+
+  try {
+    const client = getGenAIClient();
+    const model = client.getGenerativeModel({
+      model: 'gemini-3.1-flash-lite',
+    });
+
+    const prompt = `
+      You are a customer relationship management AI for the brand "${brandName}".
+      Write a concise, high-quality ${tone} response to the following user review/mention.
+      
+      User Mention: "${content.replace(/"/g, '\\"')}"
+      Sentiment: ${sentiment}
+      Language: ${language}
+      Tone: ${tone}
+
+      Guidelines:
+      - Be helpful, polite, and brand-aligned.
+      - Keep it under 280 characters if possible.
+      - Respond in ${language} or English if standard.
+    `;
+
+    const result = await geminiQueue.enqueue(() => model.generateContent(prompt), { label: 'Generate AI Reply' });
+    return result.response.text().trim();
+  } catch (error) {
+    logger.error(`[AI Service] Generate reply failed: ${error.message}`);
+    return `Thank you for your feedback regarding ${brandName}. We appreciate your support!`;
+  }
+};

@@ -1,12 +1,13 @@
 import BrandRepository from '../repositories/BrandRepository.js';
 import BrandMentionRepository from '../repositories/BrandMentionRepository.js';
-import { analyzeRegionalContent } from '../services/aiService.js';
+import { analyzeRegionalContent, analyzeSpamAndPriority, generateAIReply } from '../services/aiService.js';
 import { analyzeMentionThreats } from '../services/threatService.js';
 import { resolveLocationForMention, getCityRegistry } from '../services/locationService.js';
 import { dispatchWebhook } from '../services/webhookService.js';
 import { calculateBrandInsights } from '../services/insightService.js';
 import { pushNotification } from '../services/notificationService.js';
 import { sendCriticalThreatAlertEmail } from '../services/emailService.js';
+import BrandResponse from '../models/BrandResponse.js';
 import logger from '../config/logger.js';
 
 // @desc    Get mentions for a brand with filters and pagination
@@ -72,8 +73,14 @@ export const createMention = async (req, res, next) => {
     logger.info(`Analyzing threat levels & priority rating...`);
     const threatInfo = await analyzeMentionThreats(content, analysis.sentiment);
 
+    // Call spam/fake detection service
+    const spamInfo = await analyzeSpamAndPriority(content, analysis.sentiment);
+
     // Resolve hyperlocal location
     const locationInfo = resolveLocationForMention(content, analysis.language, source || 'custom', req.body.location);
+
+    // Extract hashtags
+    const extractedHashtags = (content.match(/#\w+/g) || []).map(tag => tag.toLowerCase());
 
     const mention = await BrandMentionRepository.create({
       brand: brandId,
@@ -93,6 +100,11 @@ export const createMention = async (req, res, next) => {
       location: locationInfo,
       sourcePlatform: locationInfo.sourcePlatform,
       priority: threatInfo.priority,
+      priorityReason: threatInfo.explanation || '',
+      aiClassification: spamInfo.aiClassification,
+      aiConfidence: spamInfo.aiConfidence,
+      aiReason: spamInfo.aiReason,
+      hashtags: extractedHashtags,
       threatAnalysis: {
         detectedThreats: threatInfo.detectedThreats,
         explanation: threatInfo.explanation
@@ -581,6 +593,269 @@ export const syncBrandMentions = async (req, res, next) => {
       success: true,
       message: `Successfully synced and analyzed ${savedMentions.length} mentions for ${brand.name}`,
       data: savedMentions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get priority classified mentions
+// @route   GET /api/mentions/priority
+// @access  Private
+export const getPriorityMentions = async (req, res, next) => {
+  const { brandId, priority } = req.query;
+  if (!brandId) return res.status(400).json({ success: false, message: 'brandId parameter is required' });
+
+  try {
+    const brand = await BrandRepository.findOne({ _id: brandId, organization: req.user.organization });
+    if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
+
+    const filter = { brand: brandId, isDeleted: false };
+    if (priority) {
+      filter.priority = priority.toLowerCase();
+    } else {
+      filter.priority = { $in: ['critical', 'high'] };
+    }
+
+    const mentions = await BrandMentionRepository.find(filter, '-publishedAt');
+    res.json({ success: true, count: mentions.length, data: mentions });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get spam / potentially fake classified mentions
+// @route   GET /api/mentions/spam-fake
+// @access  Private
+export const getSpamFakeMentions = async (req, res, next) => {
+  const { brandId, classification } = req.query;
+  if (!brandId) return res.status(400).json({ success: false, message: 'brandId parameter is required' });
+
+  try {
+    const brand = await BrandRepository.findOne({ _id: brandId, organization: req.user.organization });
+    if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
+
+    const filter = { brand: brandId, isDeleted: false };
+    if (classification) {
+      filter.$or = [
+        { aiClassification: classification },
+        { userClassification: classification },
+      ];
+    } else {
+      filter.$or = [
+        { aiClassification: { $in: ['SPAM', 'POTENTIALLY_FAKE'] } },
+        { userClassification: { $in: ['SPAM', 'POTENTIALLY_FAKE'] } },
+      ];
+    }
+
+    const mentions = await BrandMentionRepository.find(filter, '-publishedAt');
+    res.json({ success: true, count: mentions.length, data: mentions });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Manually change user classification (GENUINE, SPAM, POTENTIALLY_FAKE) without overwriting AI classification
+// @route   POST /api/mentions/:id/classification
+// @access  Private
+export const updateClassification = async (req, res, next) => {
+  const { id } = req.params;
+  const { userClassification, userClassificationReason } = req.body;
+
+  if (!['GENUINE', 'SPAM', 'POTENTIALLY_FAKE'].includes(userClassification)) {
+    return res.status(400).json({ success: false, message: 'userClassification must be GENUINE, SPAM, or POTENTIALLY_FAKE' });
+  }
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    mention.userClassification = userClassification;
+    mention.userClassificationReason = userClassificationReason || 'Manually reviewed by brand administrator.';
+    mention.updatedBy = req.user._id;
+    await mention.save();
+
+    res.json({
+      success: true,
+      message: 'Classification updated successfully',
+      data: {
+        id: mention._id,
+        aiClassification: mention.aiClassification,
+        aiConfidence: mention.aiConfidence,
+        aiReason: mention.aiReason,
+        userClassification: mention.userClassification,
+        userClassificationReason: mention.userClassificationReason,
+        updatedBy: mention.updatedBy,
+        updatedAt: mention.updatedAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Generate an AI reply using Gemini for a mention
+// @route   POST /api/mentions/:id/generate-reply
+// @access  Private
+export const generateMentionReply = async (req, res, next) => {
+  const { id } = req.params;
+  const { tone } = req.body;
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    const replyText = await generateAIReply({
+      content: mention.content,
+      sentiment: mention.sentiment,
+      language: mention.language || 'English',
+      brandName: brand.name,
+      tone: tone || 'professional',
+    });
+
+    res.json({
+      success: true,
+      data: {
+        mentionId: mention._id,
+        reply: replyText,
+        tone: tone || 'professional',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create draft / attempt sending reply for a mention
+// @route   POST /api/mentions/:id/send-reply
+// @access  Private
+export const sendMentionReply = async (req, res, next) => {
+  const { id } = req.params;
+  const { content, status = 'DRAFT' } = req.body;
+
+  if (!content) return res.status(400).json({ success: false, message: 'Reply content is required' });
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    let finalStatus = status;
+    let errorMsg = '';
+
+    if (status === 'SENT') {
+      // Official external platform APIs (Twitter/X API, Google Business API) are not connected in this project setup.
+      // In accordance with instructions: Never fake external platform sending.
+      finalStatus = 'FAILED';
+      errorMsg = 'Platform integration not configured. Official external platform API is not connected to dispatch reply directly.';
+    }
+
+    const responseDoc = await BrandResponse.create({
+      mention: mention._id,
+      brand: brand._id,
+      user: req.user._id,
+      platform: mention.source || 'web',
+      content,
+      status: finalStatus,
+      sentAt: finalStatus === 'SENT' ? new Date() : null,
+      error: errorMsg,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: finalStatus === 'FAILED' 
+        ? 'Reply saved. Platform integration not configured. Official platform API required to deliver automatically.' 
+        : 'Reply response record saved successfully.',
+      data: responseDoc,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all brand response records (Draft, Approved, Sent, Failed)
+// @route   GET /api/responses
+// @access  Private
+export const getResponses = async (req, res, next) => {
+  const { brandId, status } = req.query;
+
+  try {
+    const filter = {};
+    if (brandId) {
+      filter.brand = brandId;
+    } else {
+      const brands = await BrandRepository.find({ organization: req.user.organization });
+      filter.brand = { $in: brands.map(b => b._id) };
+    }
+
+    if (status) {
+      filter.status = status.toUpperCase();
+    }
+
+    const responses = await BrandResponse.find(filter)
+      .populate('mention', 'content author source sentiment')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, count: responses.length, data: responses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update a response record (e.g. edit draft or approve)
+// @route   PATCH /api/responses/:id
+// @access  Private
+export const updateResponse = async (req, res, next) => {
+  const { id } = req.params;
+  const { content, status } = req.body;
+
+  try {
+    const responseDoc = await BrandResponse.findById(id);
+    if (!responseDoc) return res.status(404).json({ success: false, message: 'Response record not found' });
+
+    const brand = await BrandRepository.findOne({ _id: responseDoc.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    if (content !== undefined) responseDoc.content = content;
+    if (status !== undefined) responseDoc.status = status;
+    await responseDoc.save();
+
+    res.json({ success: true, data: responseDoc });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Retry sending a failed response
+// @route   POST /api/responses/:id/retry
+// @access  Private
+export const retryResponse = async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const responseDoc = await BrandResponse.findById(id);
+    if (!responseDoc) return res.status(404).json({ success: false, message: 'Response record not found' });
+
+    const brand = await BrandRepository.findOne({ _id: responseDoc.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    responseDoc.status = 'FAILED';
+    responseDoc.error = 'Platform integration not configured. Connect official platform API to send directly.';
+    await responseDoc.save();
+
+    res.json({
+      success: false,
+      message: 'Reply prepared. Connect the official platform API to send it directly.',
+      data: responseDoc,
     });
   } catch (error) {
     next(error);

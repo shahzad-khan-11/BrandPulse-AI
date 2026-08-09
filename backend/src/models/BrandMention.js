@@ -86,6 +86,44 @@ const brandMentionSchema = new mongoose.Schema(
       default: 'low',
       index: true,
     },
+    priorityReason: {
+      type: String,
+      default: '',
+    },
+    aiClassification: {
+      type: String,
+      enum: ['GENUINE', 'POTENTIALLY_FAKE', 'SPAM'],
+      default: 'GENUINE',
+      index: true,
+    },
+    aiConfidence: {
+      type: Number,
+      default: 0.9,
+    },
+    aiReason: {
+      type: String,
+      default: '',
+    },
+    userClassification: {
+      type: String,
+      enum: ['GENUINE', 'POTENTIALLY_FAKE', 'SPAM', 'UNSET'],
+      default: 'UNSET',
+      index: true,
+    },
+    userClassificationReason: {
+      type: String,
+      default: '',
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    hashtags: {
+      type: [String],
+      default: [],
+      index: true,
+    },
     threatAnalysis: {
       detectedThreats: [String],
       explanation: String,

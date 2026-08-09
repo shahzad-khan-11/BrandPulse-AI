@@ -66,6 +66,8 @@ app.use(
 // Apply Rate Limiter
 app.use('/api', limiter);
 
+import responseRoutes from './routes/responseRoutes.js';
+
 // Mount API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/brands', brandRoutes);
@@ -79,6 +81,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/sentiment', sentimentRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/responses', responseRoutes);
 app.use('/api/insights', insightRoutes);
 app.use('/api/executive-reports', executiveReportRoutes);
 app.use('/api/assistant', assistantRoutes);
