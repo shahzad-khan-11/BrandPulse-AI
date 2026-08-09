@@ -49,8 +49,20 @@ services:
       - key: FRONTEND_URL
         sync: false          # Set to your Vercel URL after first deploy
 
-      - key: RESEND_API_KEY
-        sync: false
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+
+      - key: EMAIL_PORT
+        value: "587"
+
+      - key: EMAIL_SECURE
+        value: "false"
+
+      - key: EMAIL_USER
+        sync: false          # Set your Gmail address in Render dashboard
+
+      - key: EMAIL_PASS
+        sync: false          # Set your 16-character Gmail App Password in Render dashboard
 
       - key: EMAIL_FROM
-        sync: false
+        sync: false          # E.g. BrandPulse AI <yourgmail@gmail.com>

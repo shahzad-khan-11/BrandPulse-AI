@@ -37,6 +37,7 @@ export const connect = async () => {
   try {
     await mongoose.connect(uri, {
       serverSelectionTimeoutMS: 5000,
+      bufferCommands: false, // Fail fast on queries when DB is disconnected instead of buffering 10s
       autoIndex: true, // Auto-build indexes in development/test
     });
   } catch (error) {

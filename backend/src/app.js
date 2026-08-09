@@ -101,11 +101,12 @@ app.get('/health/liveness', (req, res) => {
 // Readiness Check: Verifies dependent systems (e.g. MongoDB) are up
 app.get('/health/readiness', (req, res) => {
   const dbHealth = healthCheck();
+  const smtpConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
   if (dbHealth.status === 'UP') {
-    res.status(200).json({ status: 'UP', database: dbHealth });
+    res.status(200).json({ status: 'UP', database: dbHealth, smtp: { configured: smtpConfigured, host: process.env.EMAIL_HOST || 'smtp.gmail.com', port: process.env.EMAIL_PORT || 587 } });
   } else {
     logger.warn('Readiness probe failed: Database offline');
-    res.status(503).json({ status: 'DOWN', message: 'Service Unavailable (Database offline)', database: dbHealth });
+    res.status(503).json({ status: 'DOWN', message: 'Service Unavailable (Database offline)', database: dbHealth, smtp: { configured: smtpConfigured } });
   }
 });
 

@@ -1,29 +1,63 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import logger from '../config/logger.js';
 
-let resendClient = null;
+let transporter = null;
 
-const getResendClient = () => {
-  if (!process.env.RESEND_API_KEY) {
-    logger.error('[EmailService] ❌ RESEND_API_KEY environment variable is not set. Email sending is DISABLED.');
-    return null;
+const getTransporter = () => {
+  const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.EMAIL_PORT || '587', 10);
+  const secure = process.env.EMAIL_SECURE === 'true'; // false for 587 (STARTTLS)
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
+
+  if (!user || !pass) {
+    logger.warn('[EmailService] ⚠️ EMAIL_USER or EMAIL_PASS environment variable is not configured. Email delivery will fail.');
   }
-  if (!resendClient) {
-    resendClient = new Resend(process.env.RESEND_API_KEY);
+
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
   }
-  return resendClient;
+
+  return transporter;
+};
+
+/**
+ * Verify SMTP connection status for health checks
+ */
+export const verifySmtpConnection = async () => {
+  try {
+    const transport = getTransporter();
+    await transport.verify();
+    return true;
+  } catch (error) {
+    logger.error(`[EmailService] ❌ SMTP Verification failed: ${error.message}`);
+    return false;
+  }
 };
 
 const getSender = () => {
-  const emailAddr = process.env.EMAIL_FROM || 'onboarding@resend.dev';
-  return `BrandPulse AI <${emailAddr}>`;
+  if (process.env.EMAIL_FROM) {
+    return process.env.EMAIL_FROM;
+  }
+  const user = process.env.EMAIL_USER || 'no-reply@gmail.com';
+  return `BrandPulse AI <${user}>`;
 };
 
 const sendEmail = async (mailOptions, retries = 1) => {
-  const resend = getResendClient();
-  if (!resend) return false;
-
+  const transport = getTransporter();
   const sender = getSender();
+
   const options = {
     from: mailOptions.from || sender,
     to: mailOptions.to,
@@ -35,18 +69,15 @@ const sendEmail = async (mailOptions, retries = 1) => {
     options.attachments = mailOptions.attachments;
   }
 
-  logger.info(`[EmailService] 📧 Sending via Resend API "${options.subject}" → ${options.to}`);
+  logger.info(`[EmailService] 📧 Sending via Gmail SMTP "${options.subject}" → ${options.to}`);
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
-      const { data, error } = await resend.emails.send(options);
-      if (error) {
-        throw new Error(error.message || JSON.stringify(error));
-      }
+      const info = await transport.sendMail(options);
       logger.info(
-        `[EmailService] ✅ Email delivered via Resend | to=${options.to} | subject="${options.subject}" | id=${data?.id}`
+        `[EmailService] ✅ Email delivered via Gmail SMTP | to=${options.to} | subject="${options.subject}" | messageId=${info?.messageId}`
       );
-      return data;
+      return info;
     } catch (err) {
       logger.error(
         `[EmailService] ❌ Send attempt ${attempt}/${retries + 1} failed | to=${options.to} | error=${err.message}`
@@ -306,7 +337,7 @@ export const sendCustomEmail = async (email, subject, contentHtml, attachments =
  * Contact form submission notification — sent to support/admin
  */
 export const sendContactEmail = async (name, senderEmail, subject, message) => {
-  const adminEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+  const adminEmail = process.env.EMAIL_USER || process.env.EMAIL_FROM || 'admin@gmail.com';
   const content = `
     <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
       New Contact Form Submission 📩
