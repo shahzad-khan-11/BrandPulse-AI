@@ -322,6 +322,124 @@ export const sendReportGeneratedEmail = async (email, name, reportName, brandNam
 };
 
 /**
+ * Email verified notification
+ */
+export const sendEmailVerifiedEmail = async (email, name) => {
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
+      Email Verified Successfully 🎉
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
+    <p style="color:#94a3b8;margin:0 0 16px;">
+      Your email address <strong style="color:#e2e8f0;">${email}</strong> has been successfully verified for BrandPulse AI.
+    </p>
+    <div style="background-color:#052e16;border:1px solid #16a34a;border-radius:8px;padding:16px;margin:16px 0;">
+      <p style="margin:0;color:#4ade80;font-weight:600;">✅ Full Account Access Unlocked</p>
+      <p style="margin:6px 0 0;font-size:13px;color:#86efac;">You can now use all features of your BrandPulse AI workspace.</p>
+    </div>
+    ${ctaButton(`${process.env.FRONTEND_URL || 'https://brandpulse-ai-three.vercel.app'}/login`, 'Go to Dashboard')}
+  `;
+  return sendEmail({ to: email, subject: 'BrandPulse AI - Email Verified 🎉', html: wrapTemplate(content) });
+};
+
+/**
+ * Login security notification email
+ */
+export const sendLoginNotificationEmail = async (email, name, loginTime = new Date().toUTCString()) => {
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
+      New Security Login Alert 🔐
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
+    <p style="color:#94a3b8;margin:0 0 16px;">
+      A new login session was initiated for your BrandPulse AI account (<strong style="color:#e2e8f0;">${email}</strong>).
+    </p>
+    <div style="background-color:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin:16px 0;">
+      <p style="margin:0 0 6px;font-size:14px;color:#818cf8;"><strong>Application:</strong> BrandPulse AI Platform</p>
+      <p style="margin:0;font-size:13px;color:#94a3b8;"><strong>Timestamp:</strong> ${loginTime}</p>
+    </div>
+    ${warningBox('If you did not initiate this login session, please reset your password immediately.')}
+  `;
+  return sendEmail({ to: email, subject: 'BrandPulse AI - New Login 🔐', html: wrapTemplate(content) });
+};
+
+/**
+ * Brand created notification
+ */
+export const sendBrandCreatedEmail = async (email, name, brandName, industry = 'General') => {
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
+      Brand Added Successfully 🏢
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
+    <p style="color:#94a3b8;margin:0 0 16px;">
+      Your new brand <strong style="color:#e2e8f0;">${brandName}</strong> has been added to BrandPulse AI and regional monitoring is active.
+    </p>
+    <div style="background-color:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin:16px 0;">
+      <p style="margin:0 0 6px;color:#818cf8;font-weight:600;">🏷️ Brand: ${brandName}</p>
+      <p style="margin:0;font-size:13px;color:#64748b;">Industry Scope: ${industry}</p>
+    </div>
+    ${ctaButton(`${process.env.FRONTEND_URL || 'https://brandpulse-ai-three.vercel.app'}/brands`, 'View Workspace Brands')}
+  `;
+  return sendEmail({ to: email, subject: 'BrandPulse AI - Brand Added Successfully 🏢', html: wrapTemplate(content) });
+};
+
+/**
+ * Brand updated notification
+ */
+export const sendBrandUpdatedEmail = async (email, name, brandName) => {
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
+      Brand Settings Updated ⚙️
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
+    <p style="color:#94a3b8;margin:0 0 16px;">
+      The brand settings for <strong style="color:#e2e8f0;">${brandName}</strong> were successfully updated in your BrandPulse AI workspace.
+    </p>
+  `;
+  return sendEmail({ to: email, subject: 'BrandPulse AI - Brand Updated ⚙️', html: wrapTemplate(content) });
+};
+
+/**
+ * Brand deleted notification
+ */
+export const sendBrandDeletedEmail = async (email, name, brandName) => {
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#e2e8f0;">
+      Brand Removed 🗑️
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
+    <p style="color:#94a3b8;margin:0 0 16px;">
+      The brand <strong style="color:#e2e8f0;">${brandName}</strong> and its associated monitoring data were removed from your workspace.
+    </p>
+  `;
+  return sendEmail({ to: email, subject: 'BrandPulse AI - Brand Removed 🗑️', html: wrapTemplate(content) });
+};
+
+/**
+ * Critical Threat Alert email
+ */
+export const sendCriticalThreatAlertEmail = async (email, name, brandName, threatReason, sentiment = 'negative', action = 'Review immediate crisis plan') => {
+  const content = `
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#f87171;">
+      🚨 Critical Brand Alert Detected
+    </h2>
+    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
+    <p style="color:#94a3b8;margin:0 0 16px;">
+      Our AI sentiment and threat monitoring detected a <strong style="color:#f87171;">CRITICAL priority threat</strong> affecting <strong style="color:#e2e8f0;">${brandName}</strong>.
+    </p>
+    <div style="background-color:#450a0a;border:1px solid #dc2626;border-radius:8px;padding:16px;margin:16px 0;">
+      <p style="margin:0 0 8px;color:#fca5a5;font-weight:700;">⚠️ Threat Level: CRITICAL</p>
+      <p style="margin:0 0 6px;font-size:14px;color:#fecaca;"><strong>Reason:</strong> ${threatReason}</p>
+      <p style="margin:0 0 6px;font-size:13px;color:#fca5a5;"><strong>Sentiment:</strong> ${sentiment.toUpperCase()}</p>
+      <p style="margin:0;font-size:13px;color:#fee2e2;"><strong>Recommended Action:</strong> ${action}</p>
+    </div>
+    ${ctaButton(`${process.env.FRONTEND_URL || 'https://brandpulse-ai-three.vercel.app'}/mentions`, 'View Critical Alert Details')}
+  `;
+  return sendEmail({ to: email, subject: `BrandPulse AI - Critical Brand Alert: ${brandName} 🚨`, html: wrapTemplate(content) });
+};
+
+/**
  * Custom/notification email with optional attachments
  */
 export const sendCustomEmail = async (email, subject, contentHtml, attachments = []) => {

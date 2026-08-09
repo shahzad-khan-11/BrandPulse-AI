@@ -4,7 +4,7 @@ import UserRepository from '../repositories/UserRepository.js';
 import RefreshTokenRepository from '../repositories/RefreshTokenRepository.js';
 import RoleRepository from '../repositories/RoleRepository.js';
 import OrganizationRepository from '../repositories/OrganizationRepository.js';
-import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
+import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail, sendEmailVerifiedEmail, sendLoginNotificationEmail } from '../services/emailService.js';
 import { pushNotification } from '../services/notificationService.js';
 import logger from '../config/logger.js';
 
@@ -70,7 +70,7 @@ export const registerUser = async (req, res, next) => {
       isVerified: false,
     });
 
-    // 5. Send welcome and verification emails
+    // 5. Send welcome and verification emails safely
     try {
       await sendWelcomeEmail(user.email, user.name);
     } catch (emailErr) {
@@ -127,6 +127,13 @@ export const loginUser = async (req, res, next) => {
       category: 'authentication',
       priority: 'INFO'
     });
+
+    // Send login notification email to user's registered email
+    try {
+      await sendLoginNotificationEmail(user.email, user.name);
+    } catch (emailErr) {
+      logger.error(`[AuthController] Login notification email failed for ${user.email}: ${emailErr.message}`);
+    }
 
     res.json({
       success: true,
@@ -210,6 +217,13 @@ export const verifyEmail = async (req, res, next) => {
     user.isVerified = true;
     user.verificationToken = undefined;
     await user.save();
+
+    // Send email verified confirmation email safely
+    try {
+      await sendEmailVerifiedEmail(user.email, user.name);
+    } catch (emailErr) {
+      logger.error(`[AuthController] Email verified confirmation failed for ${user.email}: ${emailErr.message}`);
+    }
 
     res.json({ success: true, message: 'Email verified successfully' });
   } catch (error) {

@@ -6,6 +6,7 @@ import { resolveLocationForMention, getCityRegistry } from '../services/location
 import { dispatchWebhook } from '../services/webhookService.js';
 import { calculateBrandInsights } from '../services/insightService.js';
 import { pushNotification } from '../services/notificationService.js';
+import { sendCriticalThreatAlertEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 
 // @desc    Get mentions for a brand with filters and pagination
@@ -97,6 +98,22 @@ export const createMention = async (req, res, next) => {
         explanation: threatInfo.explanation
       }
     });
+
+    // Send email alert for Critical priority threat
+    if (mention.priority === 'critical') {
+      try {
+        await sendCriticalThreatAlertEmail(
+          req.user.email,
+          req.user.name,
+          brand.name,
+          threatInfo.explanation || 'Critical brand safety threat detected in mention',
+          analysis.sentiment,
+          analysis.aiAnalysis?.suggestedAction || 'Review immediate crisis plan'
+        );
+      } catch (emailErr) {
+        logger.error(`[MentionController] Critical threat alert email failed for ${req.user.email}: ${emailErr.message}`);
+      }
+    }
 
     // Dispatch general mention created event and negative alert webhook to n8n triggers
     if (process.env.N8N_WEBHOOK_URL) {

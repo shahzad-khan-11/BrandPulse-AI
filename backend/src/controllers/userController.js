@@ -1,11 +1,12 @@
 import UserRepository from '../repositories/UserRepository.js';
 import User from '../models/User.js';
-import { sendProfileUpdatedEmail } from '../services/emailService.js';
+import { sendProfileUpdatedEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
 import { pushNotification } from '../services/notificationService.js';
+import logger from '../config/logger.js';
 
 // @desc    Get organization team users
 // @route   GET /api/users
-// @access  Private/Admin
+// @access  Private
 export const getTeamUsers = async (req, res, next) => {
   const { page, limit, sort } = req.query;
   try {
@@ -56,7 +57,7 @@ export const updateProfile = async (req, res, next) => {
     try {
       await sendProfileUpdatedEmail(updatedUser.email, updatedUser.name);
     } catch (emailErr) {
-      // Non-fatal email error
+      logger.error(`[UserController] Profile updated email failed for ${updatedUser.email}: ${emailErr.message}`);
     }
 
     res.json({ success: true, data: updatedUser });
@@ -92,6 +93,13 @@ export const changePassword = async (req, res, next) => {
       category: 'authentication',
       priority: 'HIGH'
     });
+
+    // Send password changed confirmation email safely
+    try {
+      await sendPasswordResetSuccessEmail(user.email, user.name);
+    } catch (emailErr) {
+      logger.error(`[UserController] Password changed email failed for ${user.email}: ${emailErr.message}`);
+    }
 
     res.json({ success: true, message: 'Password updated successfully' });
   } catch (error) {

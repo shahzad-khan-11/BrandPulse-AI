@@ -48,7 +48,11 @@ export const createReport = async (req, res, next) => {
     });
 
     // Send report generated email notification
-    sendReportGeneratedEmail(req.user.email, req.user.name, report.name, brand.name);
+    try {
+      await sendReportGeneratedEmail(req.user.email, req.user.name, report.name, brand.name);
+    } catch (emailErr) {
+      logger.error(`[ReportController] Report generated email failed for ${req.user.email}: ${emailErr.message}`);
+    }
 
     res.status(201).json({ success: true, data: report });
   } catch (error) {

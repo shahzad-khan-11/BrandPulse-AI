@@ -6,6 +6,7 @@ import { resolveLocationForMention } from '../services/locationService.js';
 import { dispatchWebhook } from '../services/webhookService.js';
 import WorkflowLog from '../models/WorkflowLog.js';
 import { pushNotification } from '../services/notificationService.js';
+import { sendBrandCreatedEmail, sendBrandUpdatedEmail, sendBrandDeletedEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 
 // @desc    Create a new brand
@@ -35,6 +36,13 @@ export const createBrand = async (req, res, next) => {
       category: 'workspace',
       priority: 'INFO'
     });
+
+    // Send brand created email notification to authenticated user
+    try {
+      await sendBrandCreatedEmail(req.user.email, req.user.name, brand.name, region || 'North India');
+    } catch (emailErr) {
+      logger.error(`[BrandController] Brand created email failed for ${req.user.email}: ${emailErr.message}`);
+    }
 
     // We return the response immediately to keep creation instantaneous
     res.status(201).json({ success: true, data: brand });
@@ -234,6 +242,13 @@ export const deleteBrand = async (req, res, next) => {
       priority: 'MEDIUM'
     });
 
+    // Send brand deleted email notification safely
+    try {
+      await sendBrandDeletedEmail(req.user.email, req.user.name, brand.name);
+    } catch (emailErr) {
+      logger.error(`[BrandController] Brand deleted email failed for ${req.user.email}: ${emailErr.message}`);
+    }
+
     res.json({ success: true, message: 'Brand and all associated mentions soft-deleted successfully' });
   } catch (error) {
     next(error);
@@ -274,6 +289,13 @@ export const updateBrand = async (req, res, next) => {
       category: 'workspace',
       priority: 'INFO'
     });
+
+    // Send brand updated email notification safely
+    try {
+      await sendBrandUpdatedEmail(req.user.email, req.user.name, updatedBrand.name);
+    } catch (emailErr) {
+      logger.error(`[BrandController] Brand updated email failed for ${req.user.email}: ${emailErr.message}`);
+    }
 
     res.json({ success: true, data: updatedBrand });
   } catch (error) {
