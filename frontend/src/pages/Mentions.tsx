@@ -19,6 +19,11 @@ interface Mention {
   publishedAt: string;
   language?: string;
   priority?: 'critical' | 'high' | 'medium' | 'low';
+  priorityReason?: string;
+  aiClassification?: 'GENUINE' | 'POTENTIALLY_FAKE' | 'SPAM';
+  aiConfidence?: number;
+  aiReason?: string;
+  userClassification?: string;
   threatAnalysis?: {
     detectedThreats: string[];
     explanation: string;
@@ -345,89 +350,65 @@ const Mentions: React.FC = () => {
                       </button>
 
                       {openAnalysisId === mention._id && (
-                        <div className="mt-3 p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-4 animate-slide-up shadow-inner text-slate-300">
+                        <div className="mt-4 p-5 rounded-2xl bg-slate-950 border border-indigo-500/30 text-xs space-y-5 animate-slide-up shadow-2xl text-slate-200">
                           
-                          {/* Threat Analysis section (Story 3 Requirement) */}
-                          {mention.priority && (
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">AI Threat Evaluation</span>
-                              <div className="p-2.5 rounded-lg bg-slate-900/40 border border-slate-800/85 text-xxs leading-relaxed font-semibold space-y-1.5">
-                                <p className="font-bold text-slate-200 flex items-center gap-1.5">
-                                  <span>Priority Status:</span>
-                                  {renderPriorityBadge(mention.priority)}
-                                </p>
-                                {mention.threatAnalysis?.detectedThreats && mention.threatAnalysis.detectedThreats.length > 0 && (
-                                  <p className="text-[10px] text-slate-350">
-                                    <strong>Detected Vectors:</strong> {mention.threatAnalysis.detectedThreats.map(t => t.replace('_', ' ')).join(', ')}
-                                  </p>
-                                )}
-                                <p className="text-slate-400 italic font-medium pt-1 border-t border-slate-800/80">
-                                  {mention.threatAnalysis?.explanation || 'No active threat markers detected.'}
-                                </p>
+                          {/* SECTION 1: ORIGINAL MENTION */}
+                          <div className="space-y-1.5 pb-3 border-b border-slate-800">
+                            <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">Original Mention Content</span>
+                            <p className="text-slate-100 font-bold leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                              "{mention.content}"
+                            </p>
+                          </div>
+
+                          {/* SECTION 2: COMPLETE AI ANALYSIS */}
+                          <div className="space-y-3 pb-3 border-b border-slate-800">
+                            <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">AI Safety & Sentiment Analysis</span>
+                            
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Sentiment</span>
+                                <strong className="uppercase text-slate-200">{mention.sentiment}</strong>
+                              </div>
+                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Emotion</span>
+                                <strong className="capitalize text-slate-200">{mention.aiAnalysis?.emotionalTone || 'Neutral'}</strong>
+                              </div>
+                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Priority Level</span>
+                                <strong className="uppercase text-slate-200">{mention.priority || 'LOW'}</strong>
+                              </div>
+                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Classification</span>
+                                <strong className="uppercase text-slate-200">{mention.aiClassification || 'GENUINE'}</strong>
                               </div>
                             </div>
-                          )}
 
-                          {/* Regional Sentiment Breakdown */}
-                          {mention.aiAnalysis && (
-                            <div className="space-y-3">
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Emotional Tone</span>
-                                <span className="font-semibold text-slate-350 bg-slate-900 px-2 py-0.5 rounded border border-slate-800 capitalize">
-                                  {mention.aiAnalysis.emotionalTone}
-                                </span>
+                            {mention.priorityReason && (
+                              <div className="p-2.5 rounded-lg bg-slate-900 text-xxs text-slate-350 border border-slate-800">
+                                <strong>Priority Reason:</strong> {mention.priorityReason}
                               </div>
-                              
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Key Themes</span>
-                                <div className="flex flex-wrap gap-1">
-                                  {(mention.aiAnalysis.keyThemes || []).map((t, idx) => (
-                                    <span key={idx} className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-350">
-                                      {t}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
+                            )}
 
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Suggested Brand Strategy</span>
-                                <p className="text-slate-300 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/85 text-xxs leading-relaxed font-medium">
-                                  {mention.aiAnalysis.suggestedAction}
-                                </p>
+                            {mention.aiReason && (
+                              <div className="p-2.5 rounded-lg bg-slate-900 text-xxs text-slate-350 border border-slate-800 italic">
+                                <strong>Classification Reason:</strong> {mention.aiReason}
                               </div>
+                            )}
+                          </div>
 
-                              <div className="pt-2.5 border-t border-slate-800">
-                                <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wide block mb-1">AI Reasoning</span>
-                                <p className="text-[10px] text-slate-400 leading-relaxed italic">
-                                  {mention.aiAnalysis.explanation}
-                                </p>
-                              </div>
+                          {/* SECTION 3: AI RESPONSE GENERATOR & EDITOR */}
+                          <div className="space-y-3">
+                            <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">AI Reply Studio</span>
 
-                              {mention.aiAnalysis.suggestedReplies && (
-                                <div className="pt-2.5 border-t border-slate-800 space-y-2">
-                                  <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wide block mb-1">AI Suggested Responses</span>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] font-semibold text-slate-350">
-                                    <div className="p-2.5 rounded-lg bg-indigo-950/20 border border-indigo-900/40">
-                                      <span className="font-extrabold text-[8px] text-indigo-400 block mb-0.5 uppercase tracking-wider">Hindi Suggested Reply</span>
-                                      <p className="italic">"{mention.aiAnalysis.suggestedReplies.hindiReply || 'N/A'}"</p>
-                                    </div>
-                                    <div className="p-2.5 rounded-lg bg-indigo-950/20 border border-indigo-900/40">
-                                      <span className="font-extrabold text-[8px] text-indigo-400 block mb-0.5 uppercase tracking-wider">English Suggested Reply</span>
-                                      <p className="italic">"{mention.aiAnalysis.suggestedReplies.englishReply || 'N/A'}"</p>
-                                    </div>
-                                    <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-900/40">
-                                      <span className="font-extrabold text-[8px] text-emerald-400 block mb-0.5 uppercase tracking-wider">Friendly Brand Voice</span>
-                                      <p className="italic font-medium">"{mention.aiAnalysis.suggestedReplies.friendlyReply || 'N/A'}"</p>
-                                    </div>
-                                    <div className="p-2.5 rounded-lg bg-purple-950/20 border border-purple-900/40">
-                                      <span className="font-extrabold text-[8px] text-purple-400 block mb-0.5 uppercase tracking-wider">Professional Brand Voice</span>
-                                      <p className="italic font-medium">"{mention.aiAnalysis.suggestedReplies.professionalReply || 'N/A'}"</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                            <div className="p-3 rounded-xl bg-indigo-950/20 border border-indigo-900/40 text-xxs text-slate-350 space-y-2">
+                              <span className="font-extrabold text-indigo-400 uppercase tracking-wider block text-[9px]">Default Quick Response</span>
+                              <p className="italic">"{mention.aiAnalysis?.suggestedReplies?.professionalReply || mention.aiAnalysis?.suggestedAction || 'Thank you for contacting our support team.'}"</p>
                             </div>
-                          )}
+
+                            <p className="text-xxs text-slate-400 italic">
+                              Need a customized reply? Use the <strong>Brand Intelligence Suite</strong> in the Dashboard to select custom language & tone options, edit responses, and dispatch replies safely.
+                            </p>
+                          </div>
 
                         </div>
                       )}

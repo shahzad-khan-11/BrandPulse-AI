@@ -613,11 +613,15 @@ export const getPriorityMentions = async (req, res, next) => {
     const filter = { brand: brandId, isDeleted: false };
     if (priority) {
       filter.priority = priority.toLowerCase();
-    } else {
-      filter.priority = { $in: ['critical', 'high'] };
     }
 
-    const mentions = await BrandMentionRepository.find(filter, '-publishedAt');
+    const mentions = await BrandMentionRepository.find(filter)
+      .populate('brand', 'name')
+      .sort({ publishedAt: -1 });
+
+    const priorityWeight = { critical: 4, high: 3, medium: 2, low: 1 };
+    mentions.sort((a, b) => (priorityWeight[b.priority || 'low'] || 1) - (priorityWeight[a.priority || 'low'] || 1));
+
     res.json({ success: true, count: mentions.length, data: mentions });
   } catch (error) {
     next(error);
@@ -648,7 +652,10 @@ export const getSpamFakeMentions = async (req, res, next) => {
       ];
     }
 
-    const mentions = await BrandMentionRepository.find(filter, '-publishedAt');
+    const mentions = await BrandMentionRepository.find(filter)
+      .populate('brand', 'name')
+      .sort({ publishedAt: -1 });
+
     res.json({ success: true, count: mentions.length, data: mentions });
   } catch (error) {
     next(error);
@@ -702,7 +709,7 @@ export const updateClassification = async (req, res, next) => {
 // @access  Private
 export const generateMentionReply = async (req, res, next) => {
   const { id } = req.params;
-  const { tone } = req.body;
+  const { tone, language } = req.body;
 
   try {
     const mention = await BrandMentionRepository.findById(id);
@@ -714,7 +721,7 @@ export const generateMentionReply = async (req, res, next) => {
     const replyText = await generateAIReply({
       content: mention.content,
       sentiment: mention.sentiment,
-      language: mention.language || 'English',
+      language: language || mention.language || 'English',
       brandName: brand.name,
       tone: tone || 'professional',
     });
@@ -725,6 +732,7 @@ export const generateMentionReply = async (req, res, next) => {
         mentionId: mention._id,
         reply: replyText,
         tone: tone || 'professional',
+        language: language || mention.language || 'English',
       },
     });
   } catch (error) {

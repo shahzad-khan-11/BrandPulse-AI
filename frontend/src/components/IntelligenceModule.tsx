@@ -14,7 +14,9 @@ import {
   Send, 
   Copy, 
   RotateCcw, 
-  X
+  X,
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 
 interface Brand {
@@ -41,6 +43,9 @@ interface Mention {
     state?: string;
     country?: string;
   };
+  brand?: {
+    name: string;
+  };
   hashtags?: string[];
 }
 
@@ -58,7 +63,7 @@ const IntelligenceModule: React.FC = () => {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'comparison' | 'topics' | 'hashtags' | 'priority' | 'spam' | 'replies'>('comparison');
 
-  // Notification Toast
+  // Toast Notification
   const [toast, setToast] = useState<{ success: boolean; message: string } | null>(null);
 
   const showToast = (success: boolean, message: string) => {
@@ -72,6 +77,7 @@ const IntelligenceModule: React.FC = () => {
   const [locB, setLocB] = useState('Patna');
   const [compData, setCompData] = useState<any>(null);
   const [compLoading, setCompLoading] = useState(false);
+  const [compError, setCompError] = useState<string | null>(null);
 
   // Trending Hashtags State
   const [hashtags, setHashtags] = useState<any[]>([]);
@@ -80,6 +86,8 @@ const IntelligenceModule: React.FC = () => {
   // Trending Topics State
   const [topics, setTopics] = useState<any[]>([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
+  const [selectedTopicMentions, setSelectedTopicMentions] = useState<Mention[] | null>(null);
+  const [selectedTopicName, setSelectedTopicName] = useState<string | null>(null);
 
   // Priority Mentions State
   const [priorityMentions, setPriorityMentions] = useState<Mention[]>([]);
@@ -93,9 +101,11 @@ const IntelligenceModule: React.FC = () => {
 
   // Reply Generator & Response Management State
   const [selectedMentionForReply, setSelectedMentionForReply] = useState<Mention | null>(null);
+  const [replyLanguage, setReplyLanguage] = useState<string>('English');
   const [replyTone, setReplyTone] = useState<string>('professional');
   const [generatedReplyText, setGeneratedReplyText] = useState<string>('');
   const [generatingReply, setGeneratingReply] = useState(false);
+  const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [responsesList, setResponsesList] = useState<ResponseRecord[]>([]);
 
   // Load brands on mount
@@ -118,14 +128,15 @@ const IntelligenceModule: React.FC = () => {
   const fetchComparison = async () => {
     if (!selectedBrandId || !locA || !locB) return;
     setCompLoading(true);
+    setCompError(null);
     try {
       const res = await api.get(`/analytics/location-comparison?brandId=${selectedBrandId}&type=${compType}&locA=${encodeURIComponent(locA)}&locB=${encodeURIComponent(locB)}`);
       if (res.data.success) {
         setCompData(res.data.data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Comparison fetch failed:', err);
-      showToast(false, 'Failed to compare locations.');
+      setCompError('Unable to load insights. Please try again.');
     } finally {
       setCompLoading(false);
     }
@@ -160,6 +171,25 @@ const IntelligenceModule: React.FC = () => {
       console.error('Topics fetch failed:', err);
     } finally {
       setTopicsLoading(false);
+    }
+  };
+
+  // Fetch Topic Related Mentions
+  const handleTopicClick = async (topicName: string) => {
+    if (!selectedBrandId) return;
+    setSelectedTopicName(topicName);
+    try {
+      const res = await api.get(`/mentions/brand/${selectedBrandId}?limit=10`);
+      if (res.data.success) {
+        const filtered = (res.data.data || []).filter((m: any) => 
+          (m.summary && m.summary.toLowerCase().includes(topicName.toLowerCase())) ||
+          (m.content && m.content.toLowerCase().includes(topicName.toLowerCase())) ||
+          (m.aiAnalysis?.keyThemes && m.aiAnalysis.keyThemes.some((kt: string) => kt.toLowerCase().includes(topicName.toLowerCase())))
+        );
+        setSelectedTopicMentions(filtered.length > 0 ? filtered : (res.data.data || []).slice(0, 3));
+      }
+    } catch (err) {
+      console.error('Topic mention fetch failed:', err);
     }
   };
 
@@ -228,7 +258,7 @@ const IntelligenceModule: React.FC = () => {
     try {
       const res = await api.post(`/mentions/${mentionId}/classification`, {
         userClassification,
-        userClassificationReason: `Manually marked as ${userClassification} by brand admin.`
+        userClassificationReason: `Manually reviewed and marked as ${userClassification} by brand administrator.`
       });
       if (res.data.success) {
         showToast(true, `Classification updated to ${userClassification}!`);
@@ -242,11 +272,14 @@ const IntelligenceModule: React.FC = () => {
   };
 
   // Handle Generate Reply
-  const handleGenerateReply = async (mention: Mention) => {
+  const handleGenerateReply = async (mention: Mention, selectedLang = replyLanguage, selectedT = replyTone) => {
     setSelectedMentionForReply(mention);
     setGeneratingReply(true);
     try {
-      const res = await api.post(`/mentions/${mention._id}/generate-reply`, { tone: replyTone });
+      const res = await api.post(`/mentions/${mention._id}/generate-reply`, { 
+        tone: selectedT,
+        language: selectedLang 
+      });
       if (res.data.success) {
         setGeneratedReplyText(res.data.data.reply);
       }
@@ -267,7 +300,12 @@ const IntelligenceModule: React.FC = () => {
         status,
       });
       if (res.data.success) {
-        showToast(res.data.data.status !== 'FAILED', res.data.message);
+        if (status === 'SENT' && res.data.data.status === 'FAILED') {
+          showToast(false, 'Platform integration is not configured. The reply has been saved as a draft and can be copied.');
+        } else {
+          showToast(true, res.data.message);
+        }
+        setConfirmSendOpen(false);
         setSelectedMentionForReply(null);
         setGeneratedReplyText('');
         fetchResponses();
@@ -279,9 +317,9 @@ const IntelligenceModule: React.FC = () => {
   };
 
   // Handle Copy text
-  const handleCopyText = (text: string, id: string) => {
+  const handleCopyText = (text: string) => {
     navigator.clipboard.writeText(text);
-    showToast(true, `Reply text copied to clipboard! (${id})`);
+    showToast(true, 'Reply text copied to clipboard!');
   };
 
   // Handle Retry Response
@@ -293,6 +331,27 @@ const IntelligenceModule: React.FC = () => {
     } catch (err: any) {
       showToast(false, err.response?.data?.message || 'Platform integration not configured.');
     }
+  };
+
+  // Render Bar Visualization for Comparison
+  const renderComparisonBar = (valA: number, valB: number, label: string) => {
+    const total = valA + valB;
+    const pctA = total > 0 ? Math.round((valA / total) * 100) : 50;
+    const pctB = total > 0 ? 100 - pctA : 50;
+
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between text-xxs font-bold text-slate-300">
+          <span>{locA}: {valA} ({pctA}%)</span>
+          <span className="uppercase text-slate-400">{label}</span>
+          <span>{locB}: {valB} ({pctB}%)</span>
+        </div>
+        <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
+          <div style={{ width: `${pctA}%` }} className="bg-indigo-500 h-full transition-all duration-500" title={`${locA}: ${valA}`} />
+          <div style={{ width: `${pctB}%` }} className="bg-purple-500 h-full transition-all duration-500" title={`${locB}: ${valB}`} />
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -396,12 +455,12 @@ const IntelligenceModule: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          1 & 2. LOCATION COMPARISON TAB (City vs City / State vs State)
+          1, 2 & 3. LOCATION COMPARISON TAB (Graph + Detailed Cards)
          ───────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'comparison' && (
         <div className="space-y-6">
           <div className="glass-panel p-6 bg-slate-900/40 space-y-4">
-            <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   onClick={() => { setCompType('city'); setLocA('Delhi'); setLocB('Patna'); }}
@@ -422,7 +481,7 @@ const IntelligenceModule: React.FC = () => {
                   type="text"
                   value={locA}
                   onChange={(e) => setLocA(e.target.value)}
-                  placeholder={compType === 'city' ? 'City A (e.g. Patna)' : 'State A (e.g. Bihar)'}
+                  placeholder={compType === 'city' ? 'City A (e.g. Delhi)' : 'State A (e.g. Bihar)'}
                   className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 outline-none w-36"
                 />
                 <span className="text-xs font-black text-indigo-400">VS</span>
@@ -430,7 +489,7 @@ const IntelligenceModule: React.FC = () => {
                   type="text"
                   value={locB}
                   onChange={(e) => setLocB(e.target.value)}
-                  placeholder={compType === 'city' ? 'City B (e.g. Delhi)' : 'State B (e.g. Maharashtra)'}
+                  placeholder={compType === 'city' ? 'City B (e.g. Patna)' : 'State B (e.g. Maharashtra)'}
                   className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 outline-none w-36"
                 />
               </div>
@@ -445,77 +504,126 @@ const IntelligenceModule: React.FC = () => {
             </div>
           </div>
 
-          {compData && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {compLoading ? (
+            <div className="py-12 text-center text-xs text-slate-400 font-bold">Loading comparison data...</div>
+          ) : compError ? (
+            <div className="glass-panel p-6 bg-slate-900/40 text-center text-xs text-rose-400 font-bold flex flex-col items-center gap-2">
+              <AlertCircle className="h-6 w-6 text-rose-500" />
+              <span>{compError}</span>
+            </div>
+          ) : compData && (compData.locA.totalMentions > 0 || compData.locB.totalMentions > 0) ? (
+            <div className="space-y-6">
               
-              {/* Location A Box */}
-              <div className="glass-panel p-6 bg-slate-900/40 border-l-4 border-l-indigo-500 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
-                    <MapPin className="h-4.5 w-4.5 text-indigo-400" />
-                    {compData.locA.location}
-                  </h3>
-                  <span className="text-xxs font-black uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                    Total: {compData.locA.totalMentions}
-                  </span>
+              {/* Comparative Summary Banner */}
+              {compData.summary && (
+                <div className="glass-panel p-4 bg-indigo-950/20 border border-indigo-500/30 rounded-xl flex items-center gap-3">
+                  <Sparkles className="h-5 w-5 text-indigo-400 shrink-0" />
+                  <p className="text-xs text-slate-200 font-semibold">{compData.summary}</p>
                 </div>
+              )}
 
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Positive</span>
-                    <strong className="text-emerald-400 text-sm">{compData.locA.positiveMentions}</strong>
+              {/* Graphical Visual Comparison Bar Matrix */}
+              <div className="glass-panel p-6 bg-slate-900/40 space-y-4">
+                <h4 className="text-xs font-extrabold text-slate-200 uppercase tracking-wider flex items-center justify-between">
+                  <span>Visual Comparison Graph</span>
+                  <div className="flex items-center gap-4 text-xxs font-bold">
+                    <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-indigo-500" /> {locA}</span>
+                    <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-purple-500" /> {locB}</span>
                   </div>
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Neutral</span>
-                    <strong className="text-slate-300 text-sm">{compData.locA.neutralMentions}</strong>
-                  </div>
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Negative</span>
-                    <strong className="text-rose-400 text-sm">{compData.locA.negativeMentions}</strong>
-                  </div>
-                </div>
+                </h4>
 
-                <div className="space-y-1.5 text-xs text-slate-350 bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <p><strong>Sentiment Score:</strong> <span className={compData.locA.sentimentScore >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{compData.locA.sentimentScore}</span></p>
-                  <p><strong>Threat Count:</strong> {compData.locA.threatCount}</p>
-                  <p><strong>Spam / Fake Count:</strong> {compData.locA.spamFakeCount}</p>
+                <div className="space-y-3 pt-2">
+                  {renderComparisonBar(compData.locA.totalMentions, compData.locB.totalMentions, 'Total Volume')}
+                  {renderComparisonBar(compData.locA.positiveMentions, compData.locB.positiveMentions, 'Positive Volume')}
+                  {renderComparisonBar(compData.locA.negativeMentions, compData.locB.negativeMentions, 'Negative Volume')}
+                  {renderComparisonBar(compData.locA.spamFakeCount, compData.locB.spamFakeCount, 'Spam / Fake Volume')}
                 </div>
               </div>
 
-              {/* Location B Box */}
-              <div className="glass-panel p-6 bg-slate-900/40 border-l-4 border-l-purple-500 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
-                    <MapPin className="h-4.5 w-4.5 text-purple-400" />
-                    {compData.locB.location}
-                  </h3>
-                  <span className="text-xxs font-black uppercase px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                    Total: {compData.locB.totalMentions}
-                  </span>
+              {/* Detailed Location Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Location A Card */}
+                <div className="glass-panel p-6 bg-slate-900/40 border-l-4 border-l-indigo-500 space-y-4">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                    <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
+                      <MapPin className="h-4.5 w-4.5 text-indigo-400" />
+                      {compData.locA.location}
+                    </h3>
+                    <span className="text-xxs font-black uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      Total: {compData.locA.totalMentions}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Positive</span>
+                      <strong className="text-emerald-400 text-sm">{compData.locA.positiveMentions}</strong>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Neutral</span>
+                      <strong className="text-slate-300 text-sm">{compData.locA.neutralMentions}</strong>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Negative</span>
+                      <strong className="text-rose-400 text-sm">{compData.locA.negativeMentions}</strong>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-slate-350 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                    <p><strong>Avg Sentiment Score:</strong> <span className={compData.locA.sentimentScore >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{compData.locA.sentimentScore ?? 'N/A'}</span></p>
+                    <p><strong>Critical Priority:</strong> {compData.locA.criticalCount ?? 'N/A'}</p>
+                    <p><strong>High Priority:</strong> {compData.locA.highCount ?? 'N/A'}</p>
+                    <p><strong>Medium Priority:</strong> {compData.locA.mediumCount ?? 'N/A'}</p>
+                    <p><strong>Low Priority:</strong> {compData.locA.lowCount ?? 'N/A'}</p>
+                    <p><strong>Spam Mentions:</strong> {compData.locA.spamCount ?? 'N/A'}</p>
+                    <p><strong>Potentially Fake:</strong> {compData.locA.potentiallyFakeCount ?? 'N/A'}</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Positive</span>
-                    <strong className="text-emerald-400 text-sm">{compData.locB.positiveMentions}</strong>
+                {/* Location B Card */}
+                <div className="glass-panel p-6 bg-slate-900/40 border-l-4 border-l-purple-500 space-y-4">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                    <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
+                      <MapPin className="h-4.5 w-4.5 text-purple-400" />
+                      {compData.locB.location}
+                    </h3>
+                    <span className="text-xxs font-black uppercase px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      Total: {compData.locB.totalMentions}
+                    </span>
                   </div>
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Neutral</span>
-                    <strong className="text-slate-300 text-sm">{compData.locB.neutralMentions}</strong>
+
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Positive</span>
+                      <strong className="text-emerald-400 text-sm">{compData.locB.positiveMentions}</strong>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Neutral</span>
+                      <strong className="text-slate-300 text-sm">{compData.locB.neutralMentions}</strong>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Negative</span>
+                      <strong className="text-rose-400 text-sm">{compData.locB.negativeMentions}</strong>
+                    </div>
                   </div>
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Negative</span>
-                    <strong className="text-rose-400 text-sm">{compData.locB.negativeMentions}</strong>
+
+                  <div className="space-y-2 text-xs text-slate-350 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                    <p><strong>Avg Sentiment Score:</strong> <span className={compData.locB.sentimentScore >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{compData.locB.sentimentScore ?? 'N/A'}</span></p>
+                    <p><strong>Critical Priority:</strong> {compData.locB.criticalCount ?? 'N/A'}</p>
+                    <p><strong>High Priority:</strong> {compData.locB.highCount ?? 'N/A'}</p>
+                    <p><strong>Medium Priority:</strong> {compData.locB.mediumCount ?? 'N/A'}</p>
+                    <p><strong>Low Priority:</strong> {compData.locB.lowCount ?? 'N/A'}</p>
+                    <p><strong>Spam Mentions:</strong> {compData.locB.spamCount ?? 'N/A'}</p>
+                    <p><strong>Potentially Fake:</strong> {compData.locB.potentiallyFakeCount ?? 'N/A'}</p>
                   </div>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-slate-350 bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <p><strong>Sentiment Score:</strong> <span className={compData.locB.sentimentScore >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{compData.locB.sentimentScore}</span></p>
-                  <p><strong>Threat Count:</strong> {compData.locB.threatCount}</p>
-                  <p><strong>Spam / Fake Count:</strong> {compData.locB.spamFakeCount}</p>
-                </div>
               </div>
-
+            </div>
+          ) : (
+            <div className="text-center py-12 glass-panel bg-slate-900/40 text-slate-400 text-xs font-bold">
+              No comparison data available for the selected locations.
             </div>
           )}
         </div>
@@ -532,20 +640,24 @@ const IntelligenceModule: React.FC = () => {
           </h3>
 
           {hashtagsLoading ? (
-            <div className="py-8 text-center text-xs text-slate-400">Loading hashtag analytics...</div>
+            <div className="py-8 text-center text-xs text-slate-400 font-bold">Loading hashtag insights...</div>
           ) : hashtags.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No hashtag trends recorded for this brand.</p>
+            <p className="text-xs text-slate-400 italic text-center py-8">No data available yet.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {hashtags.map((item, idx) => (
-                <div key={idx} className="glass-panel p-4 bg-slate-950 border border-slate-800 flex justify-between items-center">
-                  <div>
-                    <span className="text-xs font-black text-indigo-400 block">{item.hashtag}</span>
-                    <span className="text-[10px] text-slate-400">Mentions: {item.count}</span>
+                <div key={idx} className="glass-panel p-4 bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-black text-indigo-400">{item.hashtag}</span>
+                    <span className="text-xxs font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      {item.trendDirection}
+                    </span>
                   </div>
-                  <span className="text-xxs font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {item.trendDirection}
-                  </span>
+                  <div className="space-y-1 text-xs text-slate-350">
+                    <p><strong>Mention Count:</strong> {item.count ?? 'N/A'}</p>
+                    <p><strong>Top Location:</strong> {item.topLocation ?? 'N/A'}</p>
+                    <p><strong>Sentiment:</strong> {item.sentiment ?? 'N/A'}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -557,42 +669,83 @@ const IntelligenceModule: React.FC = () => {
           5. TRENDING TOPICS TAB
          ───────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'topics' && (
-        <div className="glass-panel p-6 bg-slate-900/40 space-y-4">
-          <h3 className="text-sm font-extrabold text-slate-100 flex items-center gap-2">
-            <TrendingUp className="h-4.5 w-4.5 text-indigo-400" />
-            Trending Topics (Gemini Semantic Analysis + Aggregation)
-          </h3>
+        <div className="space-y-6">
+          <div className="glass-panel p-6 bg-slate-900/40 space-y-4">
+            <h3 className="text-sm font-extrabold text-slate-100 flex items-center gap-2">
+              <TrendingUp className="h-4.5 w-4.5 text-indigo-400" />
+              Trending Topics (Gemini Semantic Analysis + Aggregation)
+            </h3>
 
-          {topicsLoading ? (
-            <div className="py-8 text-center text-xs text-slate-400">Loading topic analytics...</div>
-          ) : topics.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No trending topics detected for this brand.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {topics.map((t, idx) => (
-                <div key={idx} className="glass-panel p-4 bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="flex justify-between items-start gap-2">
-                    <h4 className="text-xs font-bold text-slate-200">{t.topic}</h4>
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
-                      t.priority === 'critical' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-300'
-                    }`}>
-                      {t.priority}
-                    </span>
+            {topicsLoading ? (
+              <div className="py-8 text-center text-xs text-slate-400 font-bold">Loading topic insights...</div>
+            ) : topics.length === 0 ? (
+              <p className="text-xs text-slate-400 italic text-center py-8">No data available yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {topics.map((t, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={() => handleTopicClick(t.topic)}
+                    className="glass-panel p-4 bg-slate-950 border border-slate-800 space-y-3 cursor-pointer hover:border-indigo-500/40 transition-all"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <h4 className="text-xs font-bold text-slate-200">{t.topic}</h4>
+                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
+                        t.priority === 'critical' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-300'
+                      }`}>
+                        {t.priority} Priority
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-400 text-center">
+                      <div className="bg-slate-900 p-2 rounded">
+                        <span className="block text-[8px] font-bold uppercase">Mentions</span>
+                        <strong className="text-indigo-400 text-xs">{t.count ?? 'N/A'}</strong>
+                      </div>
+                      <div className="bg-slate-900 p-2 rounded">
+                        <span className="block text-[8px] font-bold uppercase">Sentiment</span>
+                        <strong className="uppercase text-slate-200 text-xs">{t.sentiment ?? 'N/A'}</strong>
+                      </div>
+                      <div className="bg-slate-900 p-2 rounded">
+                        <span className="block text-[8px] font-bold uppercase">Location</span>
+                        <strong className="text-slate-200 text-xs truncate block">{t.location ?? 'N/A'}</strong>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center text-[10px] text-slate-400">
-                    <span>Mentions: <strong className="text-indigo-400">{t.count}</strong></span>
-                    <span>Sentiment: <strong className="uppercase text-slate-300">{t.sentiment}</strong></span>
-                    <span>Location: <strong>{t.location}</strong></span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Topic Mentions Drawer / Modal */}
+          {selectedTopicName && selectedTopicMentions && (
+            <div className="glass-panel p-6 bg-slate-950 border border-indigo-500/30 space-y-4">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <h4 className="text-xs font-extrabold text-slate-100">
+                  Related Mentions for Topic: <span className="text-indigo-400 font-bold">"{selectedTopicName}"</span>
+                </h4>
+                <button onClick={() => setSelectedTopicName(null)} className="text-slate-400 hover:text-slate-200">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {selectedTopicMentions.map((m) => (
+                  <div key={m._id} className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
+                    <div className="flex justify-between text-xxs text-slate-400">
+                      <span>{m.author} ({m.source})</span>
+                      <span>{new Date(m.publishedAt).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-slate-200 font-medium">{m.content}</p>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          6. PRIORITY SYSTEM TAB
+          6. PRIORITY SYSTEM TAB (CRITICAL -> HIGH -> MEDIUM -> LOW)
          ───────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'priority' && (
         <div className="space-y-6">
@@ -603,7 +756,7 @@ const IntelligenceModule: React.FC = () => {
               onChange={(e) => setPriorityFilter(e.target.value)}
               className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 outline-none"
             >
-              <option value="">All Critical & High</option>
+              <option value="">All Priorities (Sorted Critical ↓ Low)</option>
               <option value="critical">Critical Only</option>
               <option value="high">High Only</option>
               <option value="medium">Medium Only</option>
@@ -613,34 +766,58 @@ const IntelligenceModule: React.FC = () => {
 
           <div className="space-y-4">
             {priorityLoading ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading priority mentions...</div>
+              <div className="py-8 text-center text-xs text-slate-400 font-bold">Loading priority mentions...</div>
             ) : priorityMentions.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No priority classified mentions found for this filter.</p>
+              <p className="text-xs text-slate-400 italic text-center py-8">No data available yet.</p>
             ) : (
               priorityMentions.map((m) => (
-                <div key={m._id} className="glass-panel p-5 bg-slate-900/40 border border-slate-800 space-y-3">
+                <div key={m._id} className={`glass-panel p-5 bg-slate-900/40 border space-y-3 ${
+                  m.priority === 'critical' ? 'border-l-4 border-l-rose-500 border-rose-500/30' :
+                  m.priority === 'high' ? 'border-l-4 border-l-amber-500 border-amber-500/30' :
+                  'border-slate-800'
+                }`}>
                   <div className="flex justify-between items-center">
-                    <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded border ${
-                      m.priority === 'critical' 
-                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    }`}>
-                      {m.priority} Priority
-                    </span>
-                    <span className="text-xxs text-slate-400">{new Date(m.publishedAt).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded border ${
+                        m.priority === 'critical' 
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
+                          : m.priority === 'high'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        {m.priority} Priority
+                      </span>
+                      <span className="text-xxs font-bold text-slate-400">
+                        Brand: {m.brand?.name || 'Main Brand'}
+                      </span>
+                    </div>
+                    <span className="text-xxs text-slate-400">{new Date(m.publishedAt).toLocaleString()}</span>
                   </div>
-                  <p className="text-xs text-slate-200 font-medium">{m.content}</p>
+
+                  <p className="text-xs text-slate-100 font-bold leading-relaxed">{m.content}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xxs text-slate-350 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                    <p><strong>Platform:</strong> {m.source || 'N/A'}</p>
+                    <p><strong>Author:</strong> {m.author || 'N/A'}</p>
+                    <p><strong>City:</strong> {m.location?.city || 'N/A'}</p>
+                    <p><strong>State:</strong> {m.location?.state || 'N/A'}</p>
+                    <p><strong>Sentiment:</strong> <span className="uppercase">{m.sentiment || 'N/A'}</span></p>
+                    <p><strong>AI Classification:</strong> {m.aiClassification || 'GENUINE'}</p>
+                    <p><strong>Confidence:</strong> {m.aiConfidence ? `${(m.aiConfidence * 100).toFixed(0)}%` : 'N/A'}</p>
+                  </div>
+
                   {m.priorityReason && (
-                    <div className="p-2.5 rounded bg-slate-950 text-xxs text-slate-400 border border-slate-800">
-                      <strong>Classification Reason:</strong> {m.priorityReason}
+                    <div className="p-2.5 rounded bg-slate-950 text-xxs text-slate-400 border border-slate-800 italic">
+                      <strong>Priority Reason:</strong> {m.priorityReason}
                     </div>
                   )}
+
                   <div className="flex justify-end">
                     <button
                       onClick={() => handleGenerateReply(m)}
-                      className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xxs transition-all flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all flex items-center gap-1.5"
                     >
-                      <Sparkles className="h-3 w-3" />
+                      <Sparkles className="h-3.5 w-3.5" />
                       Generate AI Reply
                     </button>
                   </div>
@@ -652,7 +829,7 @@ const IntelligenceModule: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          7 & 8. SPAM / FAKE DETECTION & MANUAL CLASSIFICATION TAB
+          7 & 8. SPAM / FAKE DETAILS & MANUAL CLASSIFICATION TAB
          ───────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'spam' && (
         <div className="space-y-6">
@@ -672,9 +849,9 @@ const IntelligenceModule: React.FC = () => {
 
           <div className="space-y-4">
             {spamLoading ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading spam / fake mentions...</div>
+              <div className="py-8 text-center text-xs text-slate-400 font-bold">Loading spam / fake mentions...</div>
             ) : spamMentions.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No suspicious or spam mentions recorded.</p>
+              <p className="text-xs text-slate-400 italic text-center py-8">No data available yet.</p>
             ) : (
               spamMentions.map((m) => (
                 <div key={m._id} className="glass-panel p-5 bg-slate-900/40 border border-slate-800 space-y-3">
@@ -685,34 +862,44 @@ const IntelligenceModule: React.FC = () => {
                       </span>
                       {m.userClassification && m.userClassification !== 'UNSET' && (
                         <span className="text-xxs font-black uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                          Manual: {m.userClassification}
+                          Manual Override: {m.userClassification}
                         </span>
                       )}
                     </div>
-                    <span className="text-xxs text-slate-400">{m.author}</span>
+                    <span className="text-xxs text-slate-400">{new Date(m.publishedAt).toLocaleString()}</span>
                   </div>
 
-                  <p className="text-xs text-slate-200">{m.content}</p>
-                  <p className="text-xxs text-slate-400 italic">AI Reason: {m.aiReason || 'Analyzed by BrandPulse AI'}</p>
+                  <p className="text-xs text-slate-100 font-bold leading-relaxed">{m.content}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xxs text-slate-350 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                    <p><strong>Platform:</strong> {m.source || 'N/A'}</p>
+                    <p><strong>Author:</strong> {m.author || 'N/A'}</p>
+                    <p><strong>Location:</strong> {m.location?.city ? `${m.location.city}, ${m.location.state}` : 'N/A'}</p>
+                    <p><strong>Priority:</strong> <span className="uppercase">{m.priority || 'N/A'}</span></p>
+                  </div>
+
+                  <p className="text-xxs text-slate-400 italic bg-slate-950 p-2.5 rounded border border-slate-800">
+                    <strong>AI Reason:</strong> {m.aiReason || 'Analyzed by BrandPulse AI'}
+                  </p>
 
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                    <span className="text-xxs text-slate-400 font-bold uppercase">Manual Override:</span>
+                    <span className="text-xxs text-slate-400 font-bold uppercase">Manual Override Actions:</span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleUpdateClassification(m._id, 'GENUINE')}
-                        className="px-2.5 py-1 rounded bg-slate-950 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-xxs font-bold transition-all"
+                        className="px-3 py-1 rounded bg-slate-950 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-xxs font-bold transition-all"
                       >
                         Mark Genuine
                       </button>
                       <button
                         onClick={() => handleUpdateClassification(m._id, 'POTENTIALLY_FAKE')}
-                        className="px-2.5 py-1 rounded bg-slate-950 hover:bg-amber-600/20 text-amber-400 border border-amber-500/30 text-xxs font-bold transition-all"
+                        className="px-3 py-1 rounded bg-slate-950 hover:bg-amber-600/20 text-amber-400 border border-amber-500/30 text-xxs font-bold transition-all"
                       >
                         Mark Fake
                       </button>
                       <button
                         onClick={() => handleUpdateClassification(m._id, 'SPAM')}
-                        className="px-2.5 py-1 rounded bg-slate-950 hover:bg-rose-600/20 text-rose-400 border border-rose-500/30 text-xxs font-bold transition-all"
+                        className="px-3 py-1 rounded bg-slate-950 hover:bg-rose-600/20 text-rose-400 border border-rose-500/30 text-xxs font-bold transition-all"
                       >
                         Mark Spam
                       </button>
@@ -726,7 +913,7 @@ const IntelligenceModule: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          9, 10 & 11. REPLY GENERATOR & RESPONSE MANAGEMENT TAB
+          9, 10, 11 & 12. REPLY GENERATOR, DISPATCH & RESPONSE STATUS TAB
          ───────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'replies' && (
         <div className="space-y-6">
@@ -737,7 +924,7 @@ const IntelligenceModule: React.FC = () => {
               <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                 <h3 className="text-sm font-extrabold text-slate-100 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-400" />
-                  AI Reply Generator
+                  AI Response Panel & Reply Editor
                 </h3>
                 <button onClick={() => setSelectedMentionForReply(null)} className="text-slate-400 hover:text-slate-200">
                   <X className="h-4 w-4" />
@@ -745,22 +932,46 @@ const IntelligenceModule: React.FC = () => {
               </div>
 
               <div className="p-3 rounded bg-slate-950 text-xs text-slate-300 border border-slate-800">
-                <strong>Original Review:</strong> "{selectedMentionForReply.content}"
+                <strong>Original Mention:</strong> "{selectedMentionForReply.content}"
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-300">Tone:</span>
-                <select
-                  value={replyTone}
-                  onChange={(e) => setReplyTone(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 outline-none"
-                >
-                  <option value="professional">Professional</option>
-                  <option value="friendly">Friendly / Casual</option>
-                  <option value="apologetic">Apologetic</option>
-                </select>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-300">Language:</span>
+                  <select
+                    value={replyLanguage}
+                    onChange={(e) => {
+                      setReplyLanguage(e.target.value);
+                      handleGenerateReply(selectedMentionForReply, e.target.value, replyTone);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 outline-none"
+                  >
+                    <option value="English">English</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Hinglish">Hinglish</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-300">Tone:</span>
+                  <select
+                    value={replyTone}
+                    onChange={(e) => {
+                      setReplyTone(e.target.value);
+                      handleGenerateReply(selectedMentionForReply, replyLanguage, e.target.value);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 outline-none"
+                  >
+                    <option value="professional">Professional</option>
+                    <option value="friendly">Friendly / Casual</option>
+                    <option value="apologetic">Apologetic</option>
+                    <option value="short">Short</option>
+                    <option value="detailed">Detailed</option>
+                  </select>
+                </div>
+
                 <button
-                  onClick={() => handleGenerateReply(selectedMentionForReply)}
+                  onClick={() => handleGenerateReply(selectedMentionForReply, replyLanguage, replyTone)}
                   disabled={generatingReply}
                   className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
                 >
@@ -768,33 +979,58 @@ const IntelligenceModule: React.FC = () => {
                 </button>
               </div>
 
-              <textarea
-                value={generatedReplyText}
-                onChange={(e) => setGeneratedReplyText(e.target.value)}
-                rows={3}
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 outline-none"
-              />
+              <div className="space-y-1">
+                <label className="text-xxs font-bold text-slate-400 uppercase">Editable AI Suggested Reply:</label>
+                <textarea
+                  value={generatedReplyText}
+                  onChange={(e) => setGeneratedReplyText(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
-                  onClick={() => handleCopyText(generatedReplyText, 'generator')}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5"
+                  onClick={() => handleCopyText(generatedReplyText)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5"
                 >
                   <Copy className="h-3.5 w-3.5" />
                   Copy Reply
                 </button>
                 <button
                   onClick={() => handleSendReply('DRAFT')}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs"
                 >
                   Save Draft
                 </button>
                 <button
-                  onClick={() => handleSendReply('SENT')}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5"
+                  onClick={() => setConfirmSendOpen(true)}
+                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  Send Reply
+                  SEND / DISPATCH
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Send Confirmation Modal */}
+          {confirmSendOpen && (
+            <div className="glass-panel p-6 bg-slate-950 border border-rose-500/40 space-y-4">
+              <h4 className="text-sm font-bold text-slate-100">Confirm Reply Dispatch</h4>
+              <p className="text-xs text-slate-300">Are you sure you want to send this reply to the user's platform?</p>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setConfirmSendOpen(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleSendReply('SENT')}
+                  className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold"
+                >
+                  Confirm Send
                 </button>
               </div>
             </div>
@@ -803,12 +1039,12 @@ const IntelligenceModule: React.FC = () => {
           {/* Response Management Records */}
           <div className="glass-panel p-6 bg-slate-900/40 space-y-4">
             <h3 className="text-sm font-extrabold text-slate-100 flex items-center gap-2">
-              <MessageSquare className="h-4.5 w-4.5 text-indigo-400" />
-              Response Management Records (Drafts, Sent, Failed)
+              <FileText className="h-4.5 w-4.5 text-indigo-400" />
+              Response Records (DRAFT, APPROVED, SENT, FAILED)
             </h3>
 
             {responsesList.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No response records found for this brand.</p>
+              <p className="text-xs text-slate-400 italic text-center py-8">No data available yet.</p>
             ) : (
               <div className="space-y-3">
                 {responsesList.map((resItem) => (
@@ -819,7 +1055,7 @@ const IntelligenceModule: React.FC = () => {
                         resItem.status === 'FAILED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
                         'bg-amber-500/10 text-amber-400 border-amber-500/20'
                       }`}>
-                        {resItem.status}
+                        Status: {resItem.status}
                       </span>
                       <span className="text-xxs text-slate-400">{new Date(resItem.createdAt).toLocaleString()}</span>
                     </div>
@@ -834,7 +1070,7 @@ const IntelligenceModule: React.FC = () => {
 
                     <div className="flex justify-end gap-2 pt-1">
                       <button
-                        onClick={() => handleCopyText(resItem.content, resItem._id)}
+                        onClick={() => handleCopyText(resItem.content)}
                         className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 text-xxs font-bold flex items-center gap-1"
                       >
                         <Copy className="h-3 w-3" />

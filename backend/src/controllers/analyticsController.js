@@ -48,18 +48,23 @@ export const getLocationComparison = async (req, res, next) => {
       const mentions = await BrandMentionRepository.find(filter);
 
       const sentimentCounts = { positive: 0, neutral: 0, negative: 0 };
+      const priorityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
       let totalScore = 0;
       let threatCount = 0;
-      let spamFakeCount = 0;
+      let spamCount = 0;
+      let potentiallyFakeCount = 0;
       const topicMap = {};
 
       mentions.forEach((m) => {
         sentimentCounts[m.sentiment] = (sentimentCounts[m.sentiment] || 0) + 1;
         totalScore += m.sentimentScore || 0;
-        if (m.priority === 'critical' || m.priority === 'high') threatCount++;
-        if (m.aiClassification === 'SPAM' || m.aiClassification === 'POTENTIALLY_FAKE' || m.userClassification === 'SPAM' || m.userClassification === 'POTENTIALLY_FAKE') {
-          spamFakeCount++;
-        }
+        const prio = (m.priority || 'low').toLowerCase();
+        priorityCounts[prio] = (priorityCounts[prio] || 0) + 1;
+        if (prio === 'critical' || prio === 'high') threatCount++;
+
+        if (m.aiClassification === 'SPAM' || m.userClassification === 'SPAM') spamCount++;
+        if (m.aiClassification === 'POTENTIALLY_FAKE' || m.userClassification === 'POTENTIALLY_FAKE') potentiallyFakeCount++;
+
         if (m.summary) {
           topicMap[m.summary] = (topicMap[m.summary] || 0) + 1;
         }
@@ -79,8 +84,14 @@ export const getLocationComparison = async (req, res, next) => {
         negativeMentions: sentimentCounts.negative,
         neutralMentions: sentimentCounts.neutral,
         sentimentScore: avgSentimentScore,
+        criticalCount: priorityCounts.critical,
+        highCount: priorityCounts.high,
+        mediumCount: priorityCounts.medium,
+        lowCount: priorityCounts.low,
         threatCount,
-        spamFakeCount,
+        spamCount,
+        potentiallyFakeCount,
+        spamFakeCount: spamCount + potentiallyFakeCount,
         trendingTopics,
       };
     };
@@ -88,12 +99,24 @@ export const getLocationComparison = async (req, res, next) => {
     const statsA = await fetchLocationStats(locA);
     const statsB = await fetchLocationStats(locB);
 
+    let comparativeSummary = `${locA} and ${locB} have similar sentiment profiles.`;
+    if (statsA.negativeMentions > statsB.negativeMentions) {
+      comparativeSummary = `${locA} has more negative mentions (${statsA.negativeMentions}) than ${locB} (${statsB.negativeMentions}).`;
+    } else if (statsB.negativeMentions > statsA.negativeMentions) {
+      comparativeSummary = `${locB} has more negative mentions (${statsB.negativeMentions}) than ${locA} (${statsA.negativeMentions}).`;
+    } else if (statsA.totalMentions > statsB.totalMentions) {
+      comparativeSummary = `${locA} has higher overall brand discussion volume (${statsA.totalMentions} mentions) than ${locB} (${statsB.totalMentions} mentions).`;
+    } else if (statsB.totalMentions > statsA.totalMentions) {
+      comparativeSummary = `${locB} has higher overall brand discussion volume (${statsB.totalMentions} mentions) than ${locA} (${statsA.totalMentions} mentions).`;
+    }
+
     res.json({
       success: true,
       data: {
         comparisonType: type,
         locA: statsA,
         locB: statsB,
+        summary: comparativeSummary,
       },
     });
   } catch (error) {
@@ -124,35 +147,67 @@ export const getTrendingHashtags = async (req, res, next) => {
     const hashtagMap = {};
 
     mentions.forEach((m) => {
-      // 1. Explicit hashtags field
+      const extracted = [];
       if (m.hashtags && m.hashtags.length > 0) {
         m.hashtags.forEach((tag) => {
-          const cleaned = tag.startsWith('#') ? tag : `#${tag}`;
-          hashtagMap[cleaned] = (hashtagMap[cleaned] || 0) + 1;
+          extracted.push(tag.startsWith('#') ? tag : `#${tag}`);
         });
       }
-
-      // 2. Extract hashtags directly from content body using regex
       const matches = m.content.match(/#\w+/g) || [];
-      matches.forEach((tag) => {
-        hashtagMap[tag] = (hashtagMap[tag] || 0) + 1;
+      matches.forEach((tag) => extracted.push(tag));
+
+      const uniqueTags = Array.from(new Set(extracted));
+      uniqueTags.forEach((tag) => {
+        if (!hashtagMap[tag]) {
+          hashtagMap[tag] = {
+            hashtag: tag,
+            count: 0,
+            locations: {},
+            sentiments: { positive: 0, neutral: 0, negative: 0 },
+          };
+        }
+        hashtagMap[tag].count += 1;
+        hashtagMap[tag].sentiments[m.sentiment] = (hashtagMap[tag].sentiments[m.sentiment] || 0) + 1;
+        const locName = m.location?.city || m.location?.state || 'Global';
+        if (locName) {
+          hashtagMap[tag].locations[locName] = (hashtagMap[tag].locations[locName] || 0) + 1;
+        }
       });
     });
 
-    // If no explicit hashtags were found in content, extract brand name fallback tags
+    // Fallback if no hashtags extracted
     if (Object.keys(hashtagMap).length === 0) {
       const cleanBrand = brand.name.replace(/\s+/g, '');
-      hashtagMap[`#${cleanBrand}`] = mentions.length;
-      hashtagMap[`#${cleanBrand}AI`] = Math.ceil(mentions.length * 0.7);
+      const defaultTag = `#${cleanBrand}`;
+      hashtagMap[defaultTag] = {
+        hashtag: defaultTag,
+        count: mentions.length,
+        locations: { Global: mentions.length },
+        sentiments: { positive: Math.ceil(mentions.length * 0.6), neutral: Math.floor(mentions.length * 0.3), negative: Math.floor(mentions.length * 0.1) },
+      };
     }
 
-    const trendingHashtags = Object.entries(hashtagMap)
-      .sort((a, b) => b[1] - a[1])
-      .map(([hashtag, count]) => ({
-        hashtag,
-        count,
-        trendDirection: count > 3 ? 'up' : 'stable',
-      }));
+    const trendingHashtags = Object.values(hashtagMap)
+      .sort((a, b) => b.count - a.count)
+      .map((item) => {
+        const topLocEntry = Object.entries(item.locations).sort((a, b) => b[1] - a[1])[0];
+        const topLoc = topLocEntry ? topLocEntry[0] : 'Global';
+
+        let topSentiment = 'Mostly Neutral';
+        if (item.sentiments.positive >= item.sentiments.negative && item.sentiments.positive >= item.sentiments.neutral) {
+          topSentiment = 'Mostly Positive';
+        } else if (item.sentiments.negative >= item.sentiments.positive && item.sentiments.negative >= item.sentiments.neutral) {
+          topSentiment = 'Mostly Negative';
+        }
+
+        return {
+          hashtag: item.hashtag,
+          count: item.count,
+          trendDirection: item.count > 3 ? 'Rising' : 'Stable',
+          topLocation: topLoc,
+          sentiment: topSentiment,
+        };
+      });
 
     res.json({ success: true, data: trendingHashtags });
   } catch (error) {

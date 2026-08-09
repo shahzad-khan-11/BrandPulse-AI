@@ -302,14 +302,17 @@ export const analyzeSpamAndPriority = async (content, sentiment) => {
   }
 };
 
-/**
- * Generates an AI reply to a brand mention based on context, sentiment, and language.
- */
-export const generateAIReply = async ({ content, sentiment, language, brandName, tone = 'professional' }) => {
+export const generateAIReply = async ({ content, sentiment, language = 'English', brandName = 'our brand', tone = 'professional' }) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'PLACEHOLDER' || apiKey.startsWith('your_')) {
     if (sentiment === 'negative') {
+      if (language.toLowerCase() === 'hindi') {
+        return `प्रिय ग्राहक, ${brandName} के संबंध में आपकी प्रतिक्रिया के लिए धन्यवाद। हमें असुविधा के लिए खेद है और हमारी टीम इस पर तुरंत ध्यान दे रही है।`;
+      }
       return `Dear customer, thank you for sharing your feedback regarding ${brandName}. We apologize for any inconvenience caused and our team is looking into this issue immediately.`;
+    }
+    if (language.toLowerCase() === 'hindi') {
+      return `नमस्ते! ${brandName} के प्रति आपके समर्थन के लिए बहुत-बहुत धन्यवाद। हमें आपकी प्रतिक्रिया सुनकर बहुत खुशी हुई!`;
     }
     return `Hello! Thank you so much for your support for ${brandName}. We are delighted to hear your feedback!`;
   }
@@ -321,18 +324,18 @@ export const generateAIReply = async ({ content, sentiment, language, brandName,
     });
 
     const prompt = `
-      You are a customer relationship management AI for the brand "${brandName}".
-      Write a concise, high-quality ${tone} response to the following user review/mention.
+      You are an expert customer relationship management AI for the brand "${brandName}".
+      Write a response to the user review/mention below.
       
       User Mention: "${content.replace(/"/g, '\\"')}"
-      Sentiment: ${sentiment}
-      Language: ${language}
-      Tone: ${tone}
+      Detected Sentiment: ${sentiment}
+      Requested Output Language: ${language}
+      Requested Output Tone: ${tone}
 
       Guidelines:
       - Be helpful, polite, and brand-aligned.
-      - Keep it under 280 characters if possible.
-      - Respond in ${language} or English if standard.
+      - Keep it concise (under 280 characters if possible).
+      - Output ONLY the plain text reply in ${language} matching the requested ${tone} tone.
     `;
 
     const result = await geminiQueue.enqueue(() => model.generateContent(prompt), { label: 'Generate AI Reply' });
