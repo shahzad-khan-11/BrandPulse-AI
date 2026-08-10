@@ -8,6 +8,8 @@ import { calculateBrandInsights } from '../services/insightService.js';
 import { pushNotification } from '../services/notificationService.js';
 import { sendCriticalThreatAlertEmail } from '../services/emailService.js';
 import BrandResponse from '../models/BrandResponse.js';
+import ReportCase from '../models/ReportCase.js';
+import RestrictionRecord from '../models/RestrictionRecord.js';
 import logger from '../config/logger.js';
 
 // @desc    Get mentions for a brand with filters and pagination
@@ -685,6 +687,42 @@ export const seedDemoMentions = async (req, res, next) => {
         dataSource: 'demo',
       },
       {
+        content: `${brand.name} is closing down all operations across India due to bankruptcy according to unverified blog posts! #FakeNews`,
+        author: 'ClickbaitExpress',
+        source: 'news',
+        sentiment: 'negative',
+        sentimentScore: -0.9,
+        language: 'English',
+        emotion: 'fear',
+        priority: 'high',
+        priorityReason: 'Unverified rumor regarding brand insolvency.',
+        aiClassification: 'POTENTIALLY_FAKE',
+        aiConfidence: 0.93,
+        aiReason: 'Suspicious sensationalized headline unsupported by official company press releases.',
+        location: { city: 'Mumbai', state: 'Maharashtra', country: 'India', sourcePlatform: 'News' },
+        hashtags: ['#FakeNews', `#${brand.name.replace(/\s+/g, '')}`],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
+        content: `${brand.name} expands AI research hub in Bengaluru with $50M investment. Official corporate press release verified.`,
+        author: 'TechCrunch India',
+        source: 'news',
+        sentiment: 'positive',
+        sentimentScore: 0.85,
+        language: 'English',
+        emotion: 'joy',
+        priority: 'low',
+        priorityReason: 'Verified corporate expansion announcement.',
+        aiClassification: 'GENUINE',
+        aiConfidence: 0.99,
+        aiReason: 'Verified publication source with press release cross-reference.',
+        location: { city: 'Bengaluru', state: 'Karnataka', country: 'India', sourcePlatform: 'News' },
+        hashtags: ['#TechNews', '#Expansion', `#${brand.name.replace(/\s+/g, '')}`],
+        isDemo: true,
+        dataSource: 'demo',
+      },
+      {
         content: `${brand.name} is the worst brand ever! Don't buy anything! ${brand.name} is fake! ${brand.name} scammed me!`,
         author: 'UnknownUser123',
         source: 'google_reviews',
@@ -1338,13 +1376,144 @@ export const retryResponse = async (req, res, next) => {
     responseDoc.error = 'Demo Mode - simulated retry succeeded.';
     await responseDoc.save();
 
-    res.json({
+// @desc    Submit a Report Case for a mention (Spam, Fake Review, Fake News, Harassment, etc.)
+// @route   POST /api/mentions/:id/report
+// @access  Private
+export const createReportCase = async (req, res, next) => {
+  const { id } = req.params;
+  const { reason = 'Spam', notes = '' } = req.body;
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    const reportCase = await ReportCase.create({
+      brand: brand._id,
+      mention: mention._id,
+      user: req.user._id,
+      reason,
+      notes,
+      status: mention.isDemo ? 'SIMULATED' : 'OPEN',
+      mode: mention.isDemo ? 'DEMO' : 'LIVE',
+      isDemo: mention.isDemo,
+    });
+
+    // Dispatch n8n event
+    if (process.env.N8N_WEBHOOK_URL) {
+      dispatchWebhook(process.env.N8N_WEBHOOK_URL, {
+        event: 'report.created',
+        timestamp: new Date().toISOString(),
+        brandName: brand.name,
+        reportId: reportCase._id,
+        reason,
+        status: reportCase.status
+      }).catch(err => logger.error('n8n report.created webhook error:', err));
+    }
+
+    res.status(201).json({
       success: true,
-      message: 'Demo Mode - reply simulated successfully upon retry.',
-      data: responseDoc,
+      message: mention.isDemo 
+        ? 'Demo Report Created: Internal platform report recorded successfully.'
+        : 'Report case submitted successfully for review.',
+      data: reportCase
     });
   } catch (error) {
     next(error);
   }
 };
+
+// @desc    Restrict mention content (Simulated or Real platform)
+// @route   POST /api/mentions/:id/restrict
+// @access  Private
+export const createRestrictionRecord = async (req, res, next) => {
+  const { id } = req.params;
+  const { actionType = 'RESTRICT_CONTENT', isPlatformConnected = false } = req.body;
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    const isDemo = mention.isDemo || !isPlatformConnected;
+    const status = isPlatformConnected ? 'ACTIVE' : 'SIMULATED';
+    const message = isPlatformConnected
+      ? 'Content successfully restricted via connected platform API.'
+      : 'Demo restriction recorded. External platform API is not configured.';
+
+    const restriction = await RestrictionRecord.create({
+      brand: brand._id,
+      mention: mention._id,
+      user: req.user._id,
+      actionType,
+      status,
+      mode: isDemo ? 'DEMO' : 'LIVE',
+      isDemo,
+      message,
+    });
+
+    res.status(201).json({
+      success: true,
+      message,
+      data: restriction
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get report cases history
+// @route   GET /api/mentions/reports/cases
+// @access  Private
+export const getReportCases = async (req, res, next) => {
+  const { brandId } = req.query;
+
+  try {
+    const filter = {};
+    if (brandId) {
+      filter.brand = brandId;
+    } else {
+      const brands = await BrandRepository.find({ organization: req.user.organization });
+      filter.brand = { $in: brands.map(b => b._id) };
+    }
+
+    const cases = await ReportCase.find(filter)
+      .populate('mention', 'content author source')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, count: cases.length, data: cases });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Clear all demo data (removes only isDemo=true records)
+// @route   DELETE /api/mentions/brand/:brandId/demo-data
+// @access  Private
+export const clearDemoData = async (req, res, next) => {
+  const { brandId } = req.params;
+
+  try {
+    const brand = await BrandRepository.findOne({ _id: brandId, organization: req.user.organization });
+    if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
+
+    const deletedMentions = await BrandMentionRepository.model.deleteMany({ brand: brandId, isDemo: true });
+    await BrandResponse.deleteMany({ brand: brandId, isDemo: true });
+    await ReportCase.deleteMany({ brand: brandId, isDemo: true });
+    await RestrictionRecord.deleteMany({ brand: brandId, isDemo: true });
+
+    res.json({
+      success: true,
+      message: `Cleared ${deletedMentions.deletedCount || 0} demo records for ${brand.name}. Live data remains untouched.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

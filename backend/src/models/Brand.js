@@ -30,6 +30,22 @@ const brandSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    industry: {
+      type: String,
+      trim: true,
+      default: 'E-commerce',
+      index: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    website: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     city: {
       type: String,
       required: [true, 'Please provide a city'],

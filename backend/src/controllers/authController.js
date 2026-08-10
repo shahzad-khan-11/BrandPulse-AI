@@ -4,8 +4,10 @@ import UserRepository from '../repositories/UserRepository.js';
 import RefreshTokenRepository from '../repositories/RefreshTokenRepository.js';
 import RoleRepository from '../repositories/RoleRepository.js';
 import OrganizationRepository from '../repositories/OrganizationRepository.js';
-import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail, sendEmailVerifiedEmail, sendLoginNotificationEmail } from '../services/emailService.js';
+import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail, sendPasswordResetSuccessEmail, sendEmailVerifiedEmail, sendLoginNotificationEmail, sendLoginOtpEmail, sendNewDeviceApprovalEmail } from '../services/emailService.js';
 import { pushNotification } from '../services/notificationService.js';
+import TrustedDevice from '../models/TrustedDevice.js';
+import SecurityEvent from '../models/SecurityEvent.js';
 import logger from '../config/logger.js';
 
 // JWT Generation Helpers
@@ -103,37 +105,196 @@ export const registerUser = async (req, res, next) => {
   }
 };
 
-// @desc    Authenticate user & get tokens
+// Helper to hash OTP codes safely
+const hashOtp = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
+
+// @desc    Authenticate user credentials & issue 6-digit OTP
 // @route   POST /api/auth/login
 // @access  Public
 export const loginUser = async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password, deviceInfo } = req.body;
 
   try {
     const user = await UserRepository.findByEmail(email, true);
     if (!user || !(await user.matchPassword(password))) {
+      // Log failed attempt
+      await SecurityEvent.create({
+        email,
+        eventType: 'LOGIN_ATTEMPT',
+        status: 'FAILED',
+        userAgent: req.headers['user-agent'] || '',
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+      }).catch(err => logger.error(`Security logging error: ${err.message}`));
+
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
+    // Check if device is trusted or unrecognized
+    const userAgentStr = req.headers['user-agent'] || '';
+    const ipStr = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+    const deviceHash = crypto.createHash('md5').update(`${email}-${userAgentStr}`).digest('hex');
+
+    const trustedDoc = await TrustedDevice.findOne({
+      user: user._id,
+      deviceHash,
+      isRevoked: false,
+      expiresAt: { $gt: new Date() }
+    });
+
+    const isNewDevice = !trustedDoc;
+
+    // Generate 6-digit OTP
+    const plainOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashed = hashOtp(plainOtp);
+
+    // Save OTP details on user document (expires in 10 minutes)
+    await UserRepository.model.findByIdAndUpdate(user._id, {
+      loginOtp: hashed,
+      loginOtpExpire: new Date(Date.now() + 10 * 60 * 1000),
+      loginOtpAttempts: 0,
+      pendingDeviceApproval: isNewDevice ? {
+        deviceHash,
+        browser: deviceInfo?.browser || 'Web Browser',
+        os: deviceInfo?.os || 'Desktop OS',
+        ipAddress: ipStr,
+        userAgent: userAgentStr,
+      } : null
+    });
+
+    // Send OTP email
+    try {
+      await sendLoginOtpEmail(user.email, user.name, plainOtp);
+    } catch (emailErr) {
+      logger.error(`[AuthController] OTP email delivery failed for ${user.email}: ${emailErr.message}`);
+    }
+
+    // Log security event
+    await SecurityEvent.create({
+      user: user._id,
+      email: user.email,
+      eventType: 'OTP_SENT',
+      status: 'SUCCESS',
+      userAgent: userAgentStr,
+      ipAddress: ipStr,
+      metadata: { isNewDevice }
+    }).catch(err => logger.error(`Security logging error: ${err.message}`));
+
+    res.json({
+      success: true,
+      requiresOtp: true,
+      email: user.email,
+      isNewDevice,
+      message: `A 6-digit verification code has been sent to ${user.email}.`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verify 6-digit Login OTP & complete authentication
+// @route   POST /api/auth/verify-otp
+// @access  Public
+export const verifyOtp = async (req, res, next) => {
+  const { email, otp, trustDevice = false } = req.body;
+
+  if (!email || !otp) {
+    return res.status(400).json({ success: false, message: 'Email and OTP code are required' });
+  }
+
+  try {
+    const user = await UserRepository.model.findOne({ email }).select('+loginOtp +loginOtpExpire +loginOtpAttempts +pendingDeviceApproval');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User account not found' });
+    }
+
+    if (!user.loginOtp || !user.loginOtpExpire || Date.now() > user.loginOtpExpire) {
+      return res.status(400).json({ success: false, message: 'OTP code has expired. Please request a new code.' });
+    }
+
+    if (user.loginOtpAttempts >= 5) {
+      return res.status(429).json({ success: false, message: 'Maximum OTP verification attempts exceeded. Please login again.' });
+    }
+
+    const hashedInput = hashOtp(otp);
+    if (hashedInput !== user.loginOtp) {
+      user.loginOtpAttempts = (user.loginOtpAttempts || 0) + 1;
+      await user.save();
+      return res.status(400).json({ success: false, message: 'Invalid OTP code. Please check and try again.' });
+    }
+
+    // Check if new device approval is required
+    let newDevicePending = false;
+    let approvalToken = null;
+
+    if (user.pendingDeviceApproval) {
+      newDevicePending = true;
+      approvalToken = crypto.randomBytes(32).toString('hex');
+      user.deviceApprovalToken = approvalToken;
+      await user.save();
+
+      // Dispatch New Device Approval email
+      try {
+        await sendNewDeviceApprovalEmail(
+          user.email,
+          user.name,
+          user.pendingDeviceApproval,
+          approvalToken
+        );
+      } catch (emailErr) {
+        logger.error(`[AuthController] Device approval email failed for ${user.email}: ${emailErr.message}`);
+      }
+
+      await SecurityEvent.create({
+        user: user._id,
+        email: user.email,
+        eventType: 'NEW_DEVICE_DETECTED',
+        status: 'PENDING',
+        userAgent: req.headers['user-agent'] || '',
+        ipAddress: req.ip || '127.0.0.1',
+      }).catch(err => logger.error(`Security logging error: ${err.message}`));
+    }
+
+    // Clear OTP fields
+    user.loginOtp = undefined;
+    user.loginOtpExpire = undefined;
+    user.loginOtpAttempts = 0;
+    await user.save();
+
+    // Trust device if requested and approved
+    const userAgentStr = req.headers['user-agent'] || '';
+    const deviceHash = crypto.createHash('md5').update(`${user.email}-${userAgentStr}`).digest('hex');
+
+    if (trustDevice && !newDevicePending) {
+      await TrustedDevice.create({
+        user: user._id,
+        deviceHash,
+        deviceName: `${user.name}'s Authorized Device`,
+        browser: req.headers['user-agent'] || 'Web Browser',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      });
+    }
+
+    if (newDevicePending) {
+      return res.json({
+        success: true,
+        requiresDeviceApproval: true,
+        message: 'New unrecognized device detected. An authorization approval request email has been sent to your registered inbox.'
+      });
+    }
+
+    // Generate JWT access & refresh tokens
     const accessToken = generateAccessToken(user._id);
     const refreshToken = await generateRefreshToken(user._id);
 
-    // Trigger successful login notification
-    await pushNotification({
-      userId: user._id,
-      organizationId: user.organization,
-      title: 'Successful Login',
-      message: `New secure authentication session initiated.`,
-      category: 'authentication',
-      priority: 'INFO'
-    });
-
-    // Send login notification email to user's registered email
-    try {
-      await sendLoginNotificationEmail(user.email, user.name);
-    } catch (emailErr) {
-      logger.error(`[AuthController] Login notification email failed for ${user.email}: ${emailErr.message}`);
-    }
+    // Security event
+    await SecurityEvent.create({
+      user: user._id,
+      email: user.email,
+      eventType: 'LOGIN_SUCCESS',
+      status: 'SUCCESS',
+      userAgent: userAgentStr,
+      ipAddress: req.ip || '127.0.0.1',
+    }).catch(err => logger.error(`Security logging error: ${err.message}`));
 
     res.json({
       success: true,
@@ -151,6 +312,140 @@ export const loginUser = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Resend 6-digit Login OTP
+// @route   POST /api/auth/resend-otp
+// @access  Public
+export const resendOtp = async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+  try {
+    const user = await UserRepository.findByEmail(email);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const plainOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashed = hashOtp(plainOtp);
+
+    await UserRepository.model.findByIdAndUpdate(user._id, {
+      loginOtp: hashed,
+      loginOtpExpire: new Date(Date.now() + 10 * 60 * 1000),
+      loginOtpAttempts: 0,
+    });
+
+    try {
+      await sendLoginOtpEmail(user.email, user.name, plainOtp);
+    } catch (emailErr) {
+      logger.error(`[AuthController] Resend OTP email failed for ${user.email}: ${emailErr.message}`);
+    }
+
+    res.json({ success: true, message: `A new 6-digit OTP code has been sent to ${user.email}.` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve / Reject new device authorization token
+// @route   POST /api/auth/approve-device
+// @access  Public
+export const handleDeviceApproval = async (req, res, next) => {
+  const { token, action } = req.body; // action: 'approve' | 'reject'
+
+  if (!token || !action) {
+    return res.status(400).json({ success: false, message: 'Token and action are required' });
+  }
+
+  try {
+    const user = await UserRepository.model.findOne({ deviceApprovalToken: token }).select('+pendingDeviceApproval +deviceApprovalToken');
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired device authorization link.' });
+    }
+
+    if (action === 'approve') {
+      if (user.pendingDeviceApproval) {
+        await TrustedDevice.create({
+          user: user._id,
+          deviceHash: user.pendingDeviceApproval.deviceHash,
+          deviceName: `${user.name}'s Authorized ${user.pendingDeviceApproval.browser || 'Device'}`,
+          browser: user.pendingDeviceApproval.browser || '',
+          os: user.pendingDeviceApproval.os || '',
+          ipAddress: user.pendingDeviceApproval.ipAddress || '',
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        });
+      }
+
+      user.pendingDeviceApproval = undefined;
+      user.deviceApprovalToken = undefined;
+      await user.save();
+
+      await SecurityEvent.create({
+        user: user._id,
+        email: user.email,
+        eventType: 'DEVICE_APPROVED',
+        status: 'SUCCESS',
+        userAgent: req.headers['user-agent'] || '',
+        ipAddress: req.ip || '127.0.0.1',
+      }).catch(err => logger.error(`Security logging error: ${err.message}`));
+
+      return res.json({ success: true, message: 'Device login successfully approved! You can now complete sign-in.' });
+    } else {
+      user.pendingDeviceApproval = undefined;
+      user.deviceApprovalToken = undefined;
+      await user.save();
+
+      await SecurityEvent.create({
+        user: user._id,
+        email: user.email,
+        eventType: 'DEVICE_REJECTED',
+        status: 'FAILED',
+        userAgent: req.headers['user-agent'] || '',
+        ipAddress: req.ip || '127.0.0.1',
+      }).catch(err => logger.error(`Security logging error: ${err.message}`));
+
+      return res.json({ success: true, message: 'Device login rejected and blocked.' });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get user's trusted devices list
+// @route   GET /api/auth/trusted-devices
+// @access  Private
+export const getTrustedDevices = async (req, res, next) => {
+  try {
+    const devices = await TrustedDevice.find({
+      user: req.user._id,
+      isRevoked: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ updatedAt: -1 });
+
+    res.json({ success: true, count: devices.length, data: devices });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Revoke a trusted device
+// @route   DELETE /api/auth/trusted-devices/:id
+// @access  Private
+export const revokeTrustedDevice = async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const device = await TrustedDevice.findOne({ _id: id, user: req.user._id });
+    if (!device) return res.status(404).json({ success: false, message: 'Trusted device not found' });
+
+    device.isRevoked = true;
+    await device.save();
+
+    res.json({ success: true, message: 'Trusted device authorization revoked successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 // @desc    Rotate access/refresh tokens
 // @route   POST /api/auth/refresh

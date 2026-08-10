@@ -85,6 +85,27 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    loginOtp: {
+      type: String,
+      select: false,
+    },
+    loginOtpExpire: {
+      type: Date,
+      select: false,
+    },
+    loginOtpAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+    deviceApprovalToken: {
+      type: String,
+      select: false,
+    },
+    pendingDeviceApproval: {
+      type: mongoose.Schema.Types.Mixed,
+      select: false,
+    },
   },
   {
     timestamps: true,

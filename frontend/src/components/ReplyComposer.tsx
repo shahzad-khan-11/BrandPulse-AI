@@ -232,14 +232,58 @@ const ReplyComposer: React.FC<ReplyComposerProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('Spam');
+  const [reportNotes, setReportNotes] = useState('');
+  const [reportFeedback, setReportFeedback] = useState<string | null>(null);
+
+  const [restrictModalOpen, setRestrictModalOpen] = useState(false);
+  const [restrictFeedback, setRestrictFeedback] = useState<string | null>(null);
+
+  const handleReportSubmit = async () => {
+    try {
+      const res = await api.post(`/mentions/${mentionId}/report`, {
+        reason: reportReason,
+        notes: reportNotes,
+      });
+      if (res.data.success) {
+        setReportFeedback(res.data.message || 'Report case submitted successfully.');
+        setTimeout(() => {
+          setReportFeedback(null);
+          setReportModalOpen(false);
+        }, 3000);
+      }
+    } catch (err: any) {
+      setReportFeedback(err.response?.data?.message || 'Report submission failed.');
+    }
+  };
+
+  const handleRestrictSubmit = async () => {
+    try {
+      const res = await api.post(`/mentions/${mentionId}/restrict`, {
+        actionType: 'RESTRICT_CONTENT',
+        isPlatformConnected,
+      });
+      if (res.data.success) {
+        setRestrictFeedback(res.data.message || 'Content restricted successfully.');
+        setTimeout(() => {
+          setRestrictFeedback(null);
+          setRestrictModalOpen(false);
+        }, 3000);
+      }
+    } catch (err: any) {
+      setRestrictFeedback(err.response?.data?.message || 'Restriction failed.');
+    }
+  };
+
   return (
     <div className="mt-4 p-5 rounded-2xl bg-slate-950 border border-indigo-500/40 text-slate-200 space-y-5 animate-slide-up shadow-2xl relative">
       
       {/* Header Bar */}
-      <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+      <div className="flex flex-wrap justify-between items-center pb-3 border-b border-slate-800 gap-2">
         <div>
           <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">
-            REPLY COMPOSER
+            REPLY COMPOSER & CONTENT ACTIONS
           </span>
           <h4 className="font-extrabold text-sm text-slate-100 flex items-center gap-2 mt-0.5">
             <span>Replying to @{author}</span>
@@ -248,13 +292,119 @@ const ReplyComposer: React.FC<ReplyComposerProps> = ({
             </span>
           </h4>
         </div>
-        <button 
-          onClick={onClose} 
-          className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
+
+        <div className="flex items-center gap-2">
+          {/* Report Button */}
+          <button
+            onClick={() => setReportModalOpen(true)}
+            className="px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all"
+          >
+            Report
+          </button>
+
+          {/* Restrict Button */}
+          <button
+            onClick={() => setRestrictModalOpen(true)}
+            className="px-3 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all"
+          >
+            Restrict
+          </button>
+
+          <button 
+            onClick={onClose} 
+            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
+
+      {/* REPORT MODAL OVERLAY */}
+      {reportModalOpen && (
+        <div className="p-4 rounded-xl bg-slate-900 border border-amber-500/40 space-y-3 animate-fade-in">
+          <h5 className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4" /> Report Content Case
+          </h5>
+          {reportFeedback ? (
+            <p className="text-xs text-emerald-400 font-bold">{reportFeedback}</p>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Reason:</label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="w-full p-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200"
+                >
+                  <option value="Spam">Spam</option>
+                  <option value="Fake Review">Fake Review</option>
+                  <option value="Fake News">Fake News</option>
+                  <option value="Harassment">Harassment</option>
+                  <option value="Misleading Content">Misleading Content</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Optional Notes:</label>
+                <input
+                  type="text"
+                  value={reportNotes}
+                  onChange={(e) => setReportNotes(e.target.value)}
+                  placeholder="Provide additional details..."
+                  className="w-full p-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setReportModalOpen(false)}
+                  className="px-3 py-1 rounded-lg bg-slate-800 text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReportSubmit}
+                  className="px-3.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs"
+                >
+                  Submit Report
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* RESTRICT MODAL OVERLAY */}
+      {restrictModalOpen && (
+        <div className="p-4 rounded-xl bg-slate-900 border border-rose-500/40 space-y-3 animate-fade-in">
+          <h5 className="font-bold text-xs text-rose-400 flex items-center gap-1.5">
+            <ShieldAlert className="h-4 w-4" /> Restrict Content
+          </h5>
+          {restrictFeedback ? (
+            <p className="text-xs text-emerald-400 font-bold">{restrictFeedback}</p>
+          ) : (
+            <>
+              <p className="text-xs text-slate-300">Are you sure you want to restrict this content?</p>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setRestrictModalOpen(false)}
+                  className="px-3 py-1 rounded-lg bg-slate-800 text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRestrictSubmit}
+                  className="px-3.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-xs"
+                >
+                  Confirm Restrict
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
 
       {/* Original Message Preview */}
       <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-1">

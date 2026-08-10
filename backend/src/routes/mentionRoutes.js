@@ -16,7 +16,11 @@ import {
   dispatchReply,
   getMentionResponses,
   sendMentionReply,
-  seedDemoMentions
+  seedDemoMentions,
+  createReportCase,
+  createRestrictionRecord,
+  getReportCases,
+  clearDemoData
 } from '../controllers/mentionController.js';
 import protect from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
@@ -29,8 +33,11 @@ router.use(protect); // All mention routes require authentication
 router.get('/cities', getCities);
 router.get('/priority', getPriorityMentions);
 router.get('/spam-fake', getSpamFakeMentions);
+router.get('/reports/cases', getReportCases);
 
 router.post('/:id/classification', updateClassification);
+router.post('/:id/report', createReportCase);
+router.post('/:id/restrict', createRestrictionRecord);
 
 // Reply Suite Endpoints
 router.post('/:id/generate-replies', generateReplies);
@@ -48,7 +55,9 @@ router.route('/brand/:brandId')
 
 router.post('/brand/:brandId/sync', syncBrandMentions);
 router.post('/brand/:brandId/seed-demo', seedDemoMentions);
+router.delete('/brand/:brandId/demo-data', clearDemoData);
 router.get('/brand/:brandId/metrics', getSentimentMetrics);
 
 export default router;
+
 

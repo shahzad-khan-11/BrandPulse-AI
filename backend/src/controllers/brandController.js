@@ -13,16 +13,20 @@ import logger from '../config/logger.js';
 // @route   POST /api/brands
 // @access  Private
 export const createBrand = async (req, res, next) => {
-  const { name, keywords, city, state, region } = req.body;
+  const { name, keywords, industry, description, website, country, state, city, region } = req.body;
 
   try {
     const brand = await BrandRepository.create({
       name,
       keywords,
+      industry: industry || 'E-commerce',
+      description: description || '',
+      website: website || '',
       organization: req.user.organization,
       createdBy: req.user._id,
-      city: city || 'Delhi',
+      country: country || 'India',
       state: state || 'Delhi',
+      city: city || 'Delhi',
       region: region || 'North India',
     });
 
