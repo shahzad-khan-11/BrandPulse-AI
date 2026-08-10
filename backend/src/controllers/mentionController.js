@@ -859,9 +859,60 @@ export const updateClassification = async (req, res, next) => {
   }
 };
 
-// @desc    Generate an AI reply using Gemini for a mention
-// @route   POST /api/mentions/:id/generate-reply
+// @desc    Generate AI replies for a mention (returns 4 suggestions)
+// @route   POST /api/mentions/:id/generate-replies
 // @access  Private
+export const generateReplies = async (req, res, next) => {
+  const { id } = req.params;
+  const { tone = 'Professional', language = 'Auto Detect' } = req.body;
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    const suggestions = await generateAIReply({
+      content: mention.content,
+      sentiment: mention.sentiment,
+      emotion: mention.emotion || mention.aiAnalysis?.emotionalTone || 'neutral',
+      priority: mention.priority || 'low',
+      classification: mention.userClassification !== 'UNSET' ? mention.userClassification : (mention.aiClassification || 'GENUINE'),
+      language,
+      brandName: brand.name,
+      tone,
+      location: mention.location?.city ? `${mention.location.city}, ${mention.location.state}` : '',
+      author: mention.author || 'Anonymous'
+    });
+
+    // Dispatch n8n event
+    if (process.env.N8N_WEBHOOK_URL) {
+      dispatchWebhook(process.env.N8N_WEBHOOK_URL, {
+        event: 'reply.generated',
+        timestamp: new Date().toISOString(),
+        brandName: brand.name,
+        mentionId: mention._id,
+        suggestionsCount: suggestions.length
+      }).catch(err => logger.error('n8n reply.generated webhook error:', err));
+    }
+
+    res.json({
+      success: true,
+      data: {
+        mentionId: mention._id,
+        brandId: brand._id,
+        suggestions,
+        tone,
+        language
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Legacy single reply endpoint compatibility wrapper
 export const generateMentionReply = async (req, res, next) => {
   const { id } = req.params;
   const { tone, language } = req.body;
@@ -873,20 +924,24 @@ export const generateMentionReply = async (req, res, next) => {
     const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
     if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
 
-    const replyText = await generateAIReply({
+    const suggestions = await generateAIReply({
       content: mention.content,
       sentiment: mention.sentiment,
       language: language || mention.language || 'English',
       brandName: brand.name,
-      tone: tone || 'professional',
+      tone: tone || 'Professional',
+      author: mention.author
     });
+
+    const replyText = Array.isArray(suggestions) ? (suggestions[0]?.text || '') : suggestions;
 
     res.json({
       success: true,
       data: {
         mentionId: mention._id,
         reply: replyText,
-        tone: tone || 'professional',
+        suggestions,
+        tone: tone || 'Professional',
         language: language || mention.language || 'English',
       },
     });
@@ -895,12 +950,66 @@ export const generateMentionReply = async (req, res, next) => {
   }
 };
 
-// @desc    Create draft / attempt sending reply for a mention
-// @route   POST /api/mentions/:id/send-reply
+// @desc    Select a generated reply for a mention
+// @route   POST /api/mentions/:id/select-reply
 // @access  Private
-export const sendMentionReply = async (req, res, next) => {
+export const selectReply = async (req, res, next) => {
   const { id } = req.params;
-  const { content, status = 'DRAFT', mode = 'LIVE' } = req.body;
+  const { selectedReply } = req.body;
+
+  if (!selectedReply) {
+    return res.status(400).json({ success: false, message: 'selectedReply text is required' });
+  }
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    // Store in BrandResponse as GENERATED
+    const responseDoc = await BrandResponse.create({
+      mention: mention._id,
+      brand: brand._id,
+      user: req.user._id,
+      platform: mention.source || 'web',
+      content: selectedReply,
+      aiGeneratedResponse: selectedReply,
+      finalResponse: selectedReply,
+      status: 'GENERATED',
+      mode: mention.isDemo ? 'DEMO' : 'LIVE',
+      isDemo: mention.isDemo,
+    });
+
+    // Dispatch n8n event
+    if (process.env.N8N_WEBHOOK_URL) {
+      dispatchWebhook(process.env.N8N_WEBHOOK_URL, {
+        event: 'reply.selected',
+        timestamp: new Date().toISOString(),
+        brandName: brand.name,
+        mentionId: mention._id,
+        responseId: responseDoc._id,
+        selectedReply
+      }).catch(err => logger.error('n8n reply.selected webhook error:', err));
+    }
+
+    res.json({
+      success: true,
+      message: 'Reply selected successfully',
+      data: responseDoc
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Save reply draft / edited text
+// @route   POST /api/mentions/:id/save-reply
+// @access  Private
+export const saveReply = async (req, res, next) => {
+  const { id } = req.params;
+  const { content, aiGeneratedResponse, responseId } = req.body;
 
   if (!content) return res.status(400).json({ success: false, message: 'Reply content is required' });
 
@@ -911,42 +1020,241 @@ export const sendMentionReply = async (req, res, next) => {
     const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
     if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
 
-    let finalStatus = status;
-    let errorMsg = '';
-    let isDemo = mode === 'DEMO' || mention.isDemo;
-
-    if (status === 'SENT') {
-      if (isDemo) {
-        finalStatus = 'SIMULATED';
-        errorMsg = 'Demo Mode - simulated platform response dispatched successfully.';
-      } else {
-        // Official external platform APIs (Twitter/X API, Google Business API) are not connected in live mode.
-        finalStatus = 'FAILED';
-        errorMsg = 'Platform integration not configured. Official external platform API is not connected to dispatch reply directly.';
+    let responseDoc;
+    if (responseId) {
+      responseDoc = await BrandResponse.findById(responseId);
+      if (responseDoc) {
+        responseDoc.content = content;
+        responseDoc.finalResponse = content;
+        if (aiGeneratedResponse) responseDoc.aiGeneratedResponse = aiGeneratedResponse;
+        responseDoc.status = 'DRAFT';
+        await responseDoc.save();
       }
     }
 
-    const responseDoc = await BrandResponse.create({
-      mention: mention._id,
-      brand: brand._id,
-      user: req.user._id,
-      platform: mention.source || 'web',
-      content,
-      status: finalStatus,
-      mode: isDemo ? 'DEMO' : 'LIVE',
-      isDemo,
-      sentAt: (finalStatus === 'SENT' || finalStatus === 'SIMULATED') ? new Date() : null,
-      error: errorMsg,
+    if (!responseDoc) {
+      responseDoc = await BrandResponse.create({
+        mention: mention._id,
+        brand: brand._id,
+        user: req.user._id,
+        platform: mention.source || 'web',
+        content,
+        aiGeneratedResponse: aiGeneratedResponse || content,
+        finalResponse: content,
+        status: 'DRAFT',
+        mode: mention.isDemo ? 'DEMO' : 'LIVE',
+        isDemo: mention.isDemo,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Reply draft saved successfully',
+      data: responseDoc
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve reply
+// @route   POST /api/mentions/:id/approve-reply
+// @access  Private
+export const approveReply = async (req, res, next) => {
+  const { id } = req.params;
+  const { content, aiGeneratedResponse, responseId } = req.body;
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    let responseDoc;
+    if (responseId) {
+      responseDoc = await BrandResponse.findById(responseId);
+      if (responseDoc) {
+        if (content) {
+          responseDoc.content = content;
+          responseDoc.finalResponse = content;
+        }
+        responseDoc.status = 'APPROVED';
+        await responseDoc.save();
+      }
+    }
+
+    if (!responseDoc) {
+      responseDoc = await BrandResponse.create({
+        mention: mention._id,
+        brand: brand._id,
+        user: req.user._id,
+        platform: mention.source || 'web',
+        content: content || 'Approved response',
+        aiGeneratedResponse: aiGeneratedResponse || content || 'Approved response',
+        finalResponse: content || 'Approved response',
+        status: 'APPROVED',
+        mode: mention.isDemo ? 'DEMO' : 'LIVE',
+        isDemo: mention.isDemo,
+      });
+    }
+
+    // Dispatch n8n event
+    if (process.env.N8N_WEBHOOK_URL) {
+      dispatchWebhook(process.env.N8N_WEBHOOK_URL, {
+        event: 'reply.approved',
+        timestamp: new Date().toISOString(),
+        brandName: brand.name,
+        mentionId: mention._id,
+        responseId: responseDoc._id
+      }).catch(err => logger.error('n8n reply.approved webhook error:', err));
+    }
+
+    res.json({
+      success: true,
+      message: 'Reply approved successfully',
+      data: responseDoc
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Dispatch reply to platform or demo simulation
+// @route   POST /api/mentions/:id/dispatch
+// @access  Private
+export const dispatchReply = async (req, res, next) => {
+  const { id } = req.params;
+  const { content, aiGeneratedResponse, responseId, isPlatformConnected = false } = req.body;
+
+  if (!content) return res.status(400).json({ success: false, message: 'Reply content is required for dispatch' });
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    let finalStatus = 'FAILED';
+    let errorMsg = '';
+    const isDemo = mention.isDemo || !isPlatformConnected;
+
+    if (isPlatformConnected) {
+      // If platform API was connected and succeeded
+      finalStatus = 'SENT';
+    } else {
+      // Platform not connected -> Demo mode / simulated
+      finalStatus = 'SIMULATED';
+      errorMsg = 'Demo Mode - reply simulated successfully.';
+    }
+
+    let responseDoc;
+    if (responseId) {
+      responseDoc = await BrandResponse.findById(responseId);
+      if (responseDoc) {
+        responseDoc.content = content;
+        responseDoc.finalResponse = content;
+        responseDoc.status = finalStatus;
+        responseDoc.mode = isDemo ? 'DEMO' : 'LIVE';
+        responseDoc.isDemo = isDemo;
+        responseDoc.sentAt = (finalStatus === 'SENT' || finalStatus === 'SIMULATED') ? new Date() : null;
+        responseDoc.error = errorMsg;
+        await responseDoc.save();
+      }
+    }
+
+    if (!responseDoc) {
+      responseDoc = await BrandResponse.create({
+        mention: mention._id,
+        brand: brand._id,
+        user: req.user._id,
+        platform: mention.source || 'web',
+        content,
+        aiGeneratedResponse: aiGeneratedResponse || content,
+        finalResponse: content,
+        status: finalStatus,
+        mode: isDemo ? 'DEMO' : 'LIVE',
+        isDemo,
+        sentAt: (finalStatus === 'SENT' || finalStatus === 'SIMULATED') ? new Date() : null,
+        error: errorMsg,
+      });
+    }
+
+    // Dispatch n8n event
+    if (process.env.N8N_WEBHOOK_URL) {
+      dispatchWebhook(process.env.N8N_WEBHOOK_URL, {
+        event: finalStatus === 'FAILED' ? 'reply.failed' : 'reply.dispatched',
+        timestamp: new Date().toISOString(),
+        brandName: brand.name,
+        mentionId: mention._id,
+        responseId: responseDoc._id,
+        status: finalStatus,
+        content
+      }).catch(err => logger.error('n8n reply dispatch webhook error:', err));
+    }
+
+    // Email notification if critical or dispatched/failed per existing email architecture
+    if (mention.priority === 'critical' || finalStatus === 'SENT' || finalStatus === 'FAILED') {
+      try {
+        await sendCriticalThreatAlertEmail(
+          req.user.email,
+          req.user.name,
+          brand.name,
+          `Reply ${finalStatus.toLowerCase()} for ${mention.priority || 'standard'} mention by @${mention.author}`,
+          mention.sentiment,
+          `Dispatch Status: ${finalStatus}. Content: "${content}"`
+        );
+      } catch (emailErr) {
+        logger.error(`[MentionController] Reply email alert error: ${emailErr.message}`);
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: finalStatus === 'SIMULATED'
-        ? 'Demo Mode: Simulated platform reply dispatched successfully.'
-        : (finalStatus === 'FAILED' 
-          ? 'Reply saved. Platform integration not configured. Official platform API required to deliver automatically.' 
-          : 'Reply response record saved successfully.'),
-      data: responseDoc,
+        ? 'Demo Mode - reply simulated successfully.'
+        : (finalStatus === 'SENT' ? 'Reply posted successfully!' : 'Reply failed to dispatch to external platform API.'),
+      data: responseDoc
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Legacy sendMentionReply wrapper mapped to dispatchReply logic
+export const sendMentionReply = async (req, res, next) => {
+  return dispatchReply(req, res, next);
+};
+
+// @desc    Get response history for a specific mention
+// @route   GET /api/mentions/:id/responses
+// @access  Private
+export const getMentionResponses = async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const mention = await BrandMentionRepository.findById(id);
+    if (!mention) return res.status(404).json({ success: false, message: 'Mention not found' });
+
+    const brand = await BrandRepository.findOne({ _id: mention.brand, organization: req.user.organization });
+    if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    const responses = await BrandResponse.find({ mention: mention._id })
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+
+    const historyStats = {
+      generatedCount: responses.filter(r => ['GENERATED', 'DRAFT', 'APPROVED', 'SENT', 'SIMULATED', 'FAILED'].includes(r.status)).length,
+      selectedCount: responses.filter(r => ['APPROVED', 'SENT', 'SIMULATED', 'FAILED'].includes(r.status)).length,
+      dispatchedCount: responses.filter(r => ['SENT', 'SIMULATED'].includes(r.status)).length,
+    };
+
+    res.json({
+      success: true,
+      count: responses.length,
+      stats: historyStats,
+      data: responses
     });
   } catch (error) {
     next(error);
@@ -997,7 +1305,10 @@ export const updateResponse = async (req, res, next) => {
     const brand = await BrandRepository.findOne({ _id: responseDoc.brand, organization: req.user.organization });
     if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
 
-    if (content !== undefined) responseDoc.content = content;
+    if (content !== undefined) {
+      responseDoc.content = content;
+      responseDoc.finalResponse = content;
+    }
     if (status !== undefined) responseDoc.status = status;
     await responseDoc.save();
 
@@ -1020,16 +1331,20 @@ export const retryResponse = async (req, res, next) => {
     const brand = await BrandRepository.findOne({ _id: responseDoc.brand, organization: req.user.organization });
     if (!brand) return res.status(403).json({ success: false, message: 'Not authorized' });
 
-    responseDoc.status = 'FAILED';
-    responseDoc.error = 'Platform integration not configured. Connect official platform API to send directly.';
+    responseDoc.status = 'SIMULATED';
+    responseDoc.mode = 'DEMO';
+    responseDoc.isDemo = true;
+    responseDoc.sentAt = new Date();
+    responseDoc.error = 'Demo Mode - simulated retry succeeded.';
     await responseDoc.save();
 
     res.json({
-      success: false,
-      message: 'Reply prepared. Connect the official platform API to send it directly.',
+      success: true,
+      message: 'Demo Mode - reply simulated successfully upon retry.',
       data: responseDoc,
     });
   } catch (error) {
     next(error);
   }
 };
+

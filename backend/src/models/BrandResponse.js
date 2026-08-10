@@ -29,6 +29,14 @@ const brandResponseSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    aiGeneratedResponse: {
+      type: String,
+      default: '',
+    },
+    finalResponse: {
+      type: String,
+      default: '',
+    },
     status: {
       type: String,
       enum: ['DRAFT', 'GENERATED', 'EDITED', 'APPROVED', 'DISPATCHING', 'SENT', 'SIMULATED', 'FAILED'],

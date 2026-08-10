@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Search, Sparkles, Building, SlidersHorizontal, MapPin, Globe, Calendar, MessageSquare } from 'lucide-react';
+import { Search, Sparkles, Building, SlidersHorizontal, MapPin, Globe, Calendar, MessageSquare, Reply } from 'lucide-react';
+import ReplyComposer from '../components/ReplyComposer';
 
 interface Brand {
   _id: string;
@@ -10,6 +11,7 @@ interface Brand {
 
 interface Mention {
   _id: string;
+  brand?: { _id: string; name: string } | string;
   source: string;
   content: string;
   translatedContent?: string;
@@ -48,6 +50,11 @@ interface Mention {
       professionalReply?: string;
     };
   };
+  replyStats?: {
+    total: number;
+    dispatched: number;
+    statusSummary?: string;
+  };
 }
 
 const Mentions: React.FC = () => {
@@ -68,8 +75,9 @@ const Mentions: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Modal active analysis index
+  // Modal / Inline active IDs
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
+  const [openReplyId, setOpenReplyId] = useState<string | null>(null);
 
   // Load brands and cities on mount
   useEffect(() => {
@@ -111,13 +119,44 @@ const Mentions: React.FC = () => {
       if (search) query += `&search=${encodeURIComponent(search)}`;
       if (dataMode === 'demo') query += `&isDemo=true`;
       if (dataMode === 'live') query += `&isDemo=false`;
-      if (priority) query += `&priority=${priority}`;
-      if (city) query += `&city=${city}`;
-      if (search) query += `&search=${encodeURIComponent(search)}`;
 
       const res = await api.get(`/mentions/brand/${selectedBrandId}${query}`);
       if (res.data.success) {
-        setMentions(res.data.data);
+        const mentionsData: Mention[] = res.data.data || [];
+
+        // Fetch reply counts for each mention
+        const updatedMentions = await Promise.all(
+          mentionsData.map(async (m) => {
+            try {
+              const respRes = await api.get(`/mentions/${m._id}/responses`);
+              if (respRes.data.success && respRes.data.stats) {
+                const { generatedCount, dispatchedCount } = respRes.data.stats;
+                let statusSummary = `Replies: 0`;
+                if (dispatchedCount > 0) {
+                  statusSummary = `Replies: 4 suggestions · ${dispatchedCount} dispatched`;
+                } else if (generatedCount > 0) {
+                  statusSummary = `Replies: 4 suggestions`;
+                }
+                return {
+                  ...m,
+                  replyStats: {
+                    total: generatedCount,
+                    dispatched: dispatchedCount,
+                    statusSummary
+                  }
+                };
+              }
+            } catch (err) {
+              // ignore
+            }
+            return {
+              ...m,
+              replyStats: { total: 0, dispatched: 0, statusSummary: 'Replies: 0' }
+            };
+          })
+        );
+
+        setMentions(updatedMentions);
         setTotalPages(res.data.pagination?.pages || 1);
       }
     } catch (err) {
@@ -130,7 +169,7 @@ const Mentions: React.FC = () => {
   useEffect(() => {
     setPage(1);
     fetchMentions();
-  }, [selectedBrandId, source, sentiment, priority, search, city]);
+  }, [selectedBrandId, source, sentiment, priority, search, city, dataMode, languageFilter]);
 
   useEffect(() => {
     fetchMentions();
@@ -162,7 +201,7 @@ const Mentions: React.FC = () => {
     }
   };
 
-  // Priority Badges Renderer (Story 3 Requirement)
+  // Priority Badges Renderer
   const renderPriorityBadge = (priorityVal: 'critical' | 'high' | 'medium' | 'low') => {
     const base = "px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border shadow-sm shrink-0";
     switch (priorityVal) {
@@ -344,7 +383,7 @@ const Mentions: React.FC = () => {
                       <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/50">
                         {mention.source}
                       </span>
-                      <h4 className="font-bold text-sm text-slate-200 mt-2">By: {mention.author}</h4>
+                      <h4 className="font-bold text-sm text-slate-200 mt-2">By: @{mention.author}</h4>
                     </div>
                     
                     {/* Sentiment & Priority Badges Stack */}
@@ -373,8 +412,9 @@ const Mentions: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Original Mention Content */}
                   <p className="text-slate-300 text-xs leading-relaxed font-normal bg-slate-950/40 p-3 rounded-xl border border-slate-800/60">
-                    {mention.content}
+                    "{mention.content}"
                   </p>
 
                   {mention.translatedContent && mention.language !== 'English' && (
@@ -384,88 +424,122 @@ const Mentions: React.FC = () => {
                     </div>
                   )}
 
+                  {/* MAIN ACTION BUTTONS: [ Reply ] & [ Expand AI ] */}
+                  <div className="mt-4 flex items-center justify-between gap-3 pt-3 border-t border-slate-800/60">
+                    <button
+                      onClick={() => setOpenReplyId(openReplyId === mention._id ? null : mention._id)}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs transition-all shadow-md flex items-center gap-1.5"
+                    >
+                      <Reply className="h-3.5 w-3.5" />
+                      <span>Reply</span>
+                    </button>
+
+                    <button
+                      onClick={() => setOpenAnalysisId(openAnalysisId === mention._id ? null : mention._id)}
+                      className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-bold transition-colors"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
+                      <span>{openAnalysisId === mention._id ? 'Collapse AI' : 'Expand AI'}</span>
+                    </button>
+                  </div>
+
+                  {/* INLINE EXPANDABLE REPLY COMPOSER PANEL */}
+                  {openReplyId === mention._id && (
+                    <ReplyComposer
+                      mentionId={mention._id}
+                      brandId={typeof mention.brand === 'object' ? mention.brand?._id || selectedBrandId : mention.brand || selectedBrandId}
+                      platform={mention.source}
+                      author={mention.author}
+                      content={mention.content}
+                      sentiment={mention.sentiment}
+                      emotion={mention.aiAnalysis?.emotionalTone}
+                      priority={mention.priority}
+                      classification={mention.userClassification !== 'UNSET' ? mention.userClassification : mention.aiClassification}
+                      language={mention.language}
+                      locationStr={mention.location?.city ? `${mention.location.city}, ${mention.location.state}` : ''}
+                      onClose={() => setOpenReplyId(null)}
+                      onResponseUpdated={() => fetchMentions()}
+                    />
+                  )}
+
                   {/* Premium AI Evaluation Box */}
-                  {(mention.aiAnalysis || mention.priority) && (
-                    <div className="mt-5 border-t border-slate-800 pt-4">
-                      <button
-                        onClick={() => setOpenAnalysisId(openAnalysisId === mention._id ? null : mention._id)}
-                        className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 text-purple-500 dark:text-purple-400 animate-pulse" />
-                        {openAnalysisId === mention._id ? 'Collapse AI Evaluation' : 'Expand AI Brand Evaluation'}
-                      </button>
+                  {(mention.aiAnalysis || mention.priority) && openAnalysisId === mention._id && (
+                    <div className="mt-4 p-5 rounded-2xl bg-slate-950 border border-indigo-500/30 text-xs space-y-5 animate-slide-up shadow-2xl text-slate-200">
+                      
+                      {/* SECTION 1: ORIGINAL MENTION */}
+                      <div className="space-y-1.5 pb-3 border-b border-slate-800">
+                        <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">Original Mention Content</span>
+                        <p className="text-slate-100 font-bold leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                          "{mention.content}"
+                        </p>
+                      </div>
 
-                      {openAnalysisId === mention._id && (
-                        <div className="mt-4 p-5 rounded-2xl bg-slate-950 border border-indigo-500/30 text-xs space-y-5 animate-slide-up shadow-2xl text-slate-200">
-                          
-                          {/* SECTION 1: ORIGINAL MENTION */}
-                          <div className="space-y-1.5 pb-3 border-b border-slate-800">
-                            <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">Original Mention Content</span>
-                            <p className="text-slate-100 font-bold leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                              "{mention.content}"
-                            </p>
+                      {/* SECTION 2: COMPLETE AI ANALYSIS */}
+                      <div className="space-y-3 pb-3 border-b border-slate-800">
+                        <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">AI Safety & Sentiment Analysis</span>
+                        
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                          <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                            <span className="text-slate-400 font-bold block uppercase text-[8px]">Sentiment</span>
+                            <strong className="uppercase text-slate-200">{mention.sentiment}</strong>
                           </div>
-
-                          {/* SECTION 2: COMPLETE AI ANALYSIS */}
-                          <div className="space-y-3 pb-3 border-b border-slate-800">
-                            <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">AI Safety & Sentiment Analysis</span>
-                            
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
-                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Sentiment</span>
-                                <strong className="uppercase text-slate-200">{mention.sentiment}</strong>
-                              </div>
-                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Emotion</span>
-                                <strong className="capitalize text-slate-200">{mention.aiAnalysis?.emotionalTone || 'Neutral'}</strong>
-                              </div>
-                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Priority Level</span>
-                                <strong className="uppercase text-slate-200">{mention.priority || 'LOW'}</strong>
-                              </div>
-                              <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                                <span className="text-slate-400 font-bold block uppercase text-[8px]">Classification</span>
-                                <strong className="uppercase text-slate-200">{mention.aiClassification || 'GENUINE'}</strong>
-                              </div>
-                            </div>
-
-                            {mention.priorityReason && (
-                              <div className="p-2.5 rounded-lg bg-slate-900 text-xxs text-slate-350 border border-slate-800">
-                                <strong>Priority Reason:</strong> {mention.priorityReason}
-                              </div>
-                            )}
-
-                            {mention.aiReason && (
-                              <div className="p-2.5 rounded-lg bg-slate-900 text-xxs text-slate-350 border border-slate-800 italic">
-                                <strong>Classification Reason:</strong> {mention.aiReason}
-                              </div>
-                            )}
+                          <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                            <span className="text-slate-400 font-bold block uppercase text-[8px]">Emotion</span>
+                            <strong className="capitalize text-slate-200">{mention.aiAnalysis?.emotionalTone || 'Neutral'}</strong>
                           </div>
-
-                          {/* SECTION 3: AI RESPONSE GENERATOR & EDITOR */}
-                          <div className="space-y-3">
-                            <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">AI Reply Studio</span>
-
-                            <div className="p-3 rounded-xl bg-indigo-950/20 border border-indigo-900/40 text-xxs text-slate-350 space-y-2">
-                              <span className="font-extrabold text-indigo-400 uppercase tracking-wider block text-[9px]">Default Quick Response</span>
-                              <p className="italic">"{mention.aiAnalysis?.suggestedReplies?.professionalReply || mention.aiAnalysis?.suggestedAction || 'Thank you for contacting our support team.'}"</p>
-                            </div>
-
-                            <p className="text-xxs text-slate-400 italic">
-                              Need a customized reply? Use the <strong>Brand Intelligence Suite</strong> in the Dashboard to select custom language & tone options, edit responses, and dispatch replies safely.
-                            </p>
+                          <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                            <span className="text-slate-400 font-bold block uppercase text-[8px]">Priority Level</span>
+                            <strong className="uppercase text-slate-200">{mention.priority || 'LOW'}</strong>
                           </div>
-
+                          <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                            <span className="text-slate-400 font-bold block uppercase text-[8px]">Classification</span>
+                            <strong className="uppercase text-slate-200">{mention.aiClassification || 'GENUINE'}</strong>
+                          </div>
                         </div>
-                      )}
+
+                        {mention.priorityReason && (
+                          <div className="p-2.5 rounded-lg bg-slate-900 text-xxs text-slate-350 border border-slate-800">
+                            <strong>Priority Reason:</strong> {mention.priorityReason}
+                          </div>
+                        )}
+
+                        {mention.aiReason && (
+                          <div className="p-2.5 rounded-lg bg-slate-900 text-xxs text-slate-350 border border-slate-800 italic">
+                            <strong>Classification Reason:</strong> {mention.aiReason}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECTION 3: DIRECT REPLY SHORTCUT */}
+                      <div className="space-y-3">
+                        <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest block">AI Reply Studio</span>
+                        <p className="text-xxs text-slate-400">
+                          Click the <strong>[ Reply ]</strong> button above to open the full Reply Composer with 4 custom AI suggestions, tone & language selectors, and dispatch control.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setOpenReplyId(mention._id);
+                            setOpenAnalysisId(null);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs transition-all flex items-center gap-1.5"
+                        >
+                          <Reply className="h-3.5 w-3.5" />
+                          <span>Open Reply Composer</span>
+                        </button>
+                      </div>
+
                     </div>
                   )}
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-900 flex justify-between text-[10px] text-slate-500 dark:text-slate-500 font-semibold uppercase tracking-wider">
+                <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-900 flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-500 font-semibold uppercase tracking-wider">
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                     Published: {new Date(mention.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+
+                  <span className="text-indigo-400 font-bold">
+                    {mention.replyStats?.statusSummary || 'Replies: 0'}
                   </span>
                 </div>
               </div>
@@ -502,3 +576,4 @@ const Mentions: React.FC = () => {
 };
 
 export default Mentions;
+

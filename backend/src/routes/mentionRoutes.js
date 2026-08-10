@@ -9,6 +9,12 @@ import {
   getSpamFakeMentions,
   updateClassification,
   generateMentionReply,
+  generateReplies,
+  selectReply,
+  saveReply,
+  approveReply,
+  dispatchReply,
+  getMentionResponses,
   sendMentionReply,
   seedDemoMentions
 } from '../controllers/mentionController.js';
@@ -25,8 +31,16 @@ router.get('/priority', getPriorityMentions);
 router.get('/spam-fake', getSpamFakeMentions);
 
 router.post('/:id/classification', updateClassification);
+
+// Reply Suite Endpoints
+router.post('/:id/generate-replies', generateReplies);
 router.post('/:id/generate-reply', generateMentionReply);
+router.post('/:id/select-reply', selectReply);
+router.post('/:id/save-reply', saveReply);
+router.post('/:id/approve-reply', approveReply);
+router.post('/:id/dispatch', dispatchReply);
 router.post('/:id/send-reply', sendMentionReply);
+router.get('/:id/responses', getMentionResponses);
 
 router.route('/brand/:brandId')
   .get(getMentions)
@@ -37,3 +51,4 @@ router.post('/brand/:brandId/seed-demo', seedDemoMentions);
 router.get('/brand/:brandId/metrics', getSentimentMetrics);
 
 export default router;
+

@@ -302,46 +302,144 @@ export const analyzeSpamAndPriority = async (content, sentiment) => {
   }
 };
 
-export const generateAIReply = async ({ content, sentiment, language = 'English', brandName = 'our brand', tone = 'professional' }) => {
+export const generateAIReply = async ({
+  content,
+  sentiment = 'neutral',
+  emotion = 'neutral',
+  priority = 'low',
+  classification = 'GENUINE',
+  language = 'Auto Detect',
+  brandName = 'our brand',
+  tone = 'Professional',
+  location = '',
+  author = ''
+}) => {
   const apiKey = process.env.GEMINI_API_KEY;
+  
+  // Local Heuristic Fallback when Gemini API key is missing / placeholder
   if (!apiKey || apiKey === 'PLACEHOLDER' || apiKey.startsWith('your_')) {
-    if (sentiment === 'negative') {
-      if (language.toLowerCase() === 'hindi') {
-        return `प्रिय ग्राहक, ${brandName} के संबंध में आपकी प्रतिक्रिया के लिए धन्यवाद। हमें असुविधा के लिए खेद है और हमारी टीम इस पर तुरंत ध्यान दे रही है।`;
+    let langStyle = language;
+    if (language === 'Auto Detect') {
+      if (/[\u0900-\u097F]/.test(content)) langStyle = 'Hindi';
+      else if (/\b(khrab|kya|hai|samajh|nhi|rha|bilkul|bhai|yaar)\b/i.test(content)) langStyle = 'Hinglish';
+      else langStyle = 'English';
+    }
+
+    if (sentiment === 'positive') {
+      if (langStyle === 'Hindi') {
+        return [
+          { style: 'Professional', text: `नमस्ते ${author !== 'Anonymous' ? author : ''}! ${brandName} के प्रति आपकी सकारात्मक प्रतिक्रिया के लिए धन्यवाद। हम आपकी सेवा करके प्रसन्न हैं।` },
+          { style: 'Friendly', text: `बहुत बहुत धन्यवाद! जानकर बेहद खुशी हुई कि आपको ${brandName} का अनुभव पसंद आया! 😊` },
+          { style: 'Short', text: `आपकी प्रतिक्रिया के लिए धन्यवाद! ${brandName} टीम।` },
+          { style: 'Detailed', text: `नमस्ते! ${brandName} को चुनने और अपना बहुमूल्य फीडबैक साझा करने के लिए धन्यवाद। हमारी टीम हमेशा सर्वश्रेष्ठ अनुभव प्रदान करने के लिए प्रतिबद्ध है।` }
+        ];
+      } else if (langStyle === 'Hinglish') {
+        return [
+          { style: 'Professional', text: `Thank you ${author !== 'Anonymous' ? author : ''} for your positive feedback regarding ${brandName}. We are glad to serve you.` },
+          { style: 'Friendly', text: `Thanks a lot! Bahut khushi hui ki aapko ${brandName} ka experience achha laga! 🙌` },
+          { style: 'Short', text: `Feedback ke liye shukriya! Team ${brandName}.` },
+          { style: 'Detailed', text: `Thank you so much! ${brandName} ko choose karne aur apna valuable review share karne ke liye shukriya. We are always here to help.` }
+        ];
+      } else {
+        return [
+          { style: 'Professional', text: `Thank you ${author !== 'Anonymous' ? author : ''} for your positive feedback regarding ${brandName}. We are delighted to know you are enjoying the experience.` },
+          { style: 'Friendly', text: `Thanks so much for the love! We're thrilled that you had a great experience with ${brandName}! 🎉` },
+          { style: 'Short', text: `Thank you for your feedback! Team ${brandName}.` },
+          { style: 'Detailed', text: `We really appreciate your kind feedback. Delivering excellent quality and service is our top priority at ${brandName}, and we look forward to serving you again.` }
+        ];
       }
-      return `Dear customer, thank you for sharing your feedback regarding ${brandName}. We apologize for any inconvenience caused and our team is looking into this issue immediately.`;
+    } else if (sentiment === 'negative') {
+      if (langStyle === 'Hindi') {
+        return [
+          { style: 'Professional', text: `हमें खेद है कि आपका अनुभव ${brandName} के साथ अच्छा नहीं रहा। हमारी सहायता टीम इस मामले की जांच कर रही है।` },
+          { style: 'Friendly', text: `असुविधा के लिए माफी चाहते हैं! हम आपकी चिंता समझते हैं और इसे जल्द हल करना चाहते हैं।` },
+          { style: 'Short', text: `असुविधा के लिए खेद है। हम जल्द ही आपसे संपर्क करेंगे।` },
+          { style: 'Detailed', text: `हमें बहुत खेद है कि आपकी अपेक्षाएं पूरी नहीं हुईं। कृपया अपनी संपर्क जानकारी साझा करें ताकि हम इस समस्या का स्थायी समाधान कर सकें।` }
+        ];
+      } else if (langStyle === 'Hinglish') {
+        return [
+          { style: 'Professional', text: `Hum extremely sorry hain ki aapko ${brandName} ke sath issue face karna pada. Hamari team issue review kar rahi hai.` },
+          { style: 'Friendly', text: `Sorry for the trouble! Hum samajhte hain aapki problem aur ise jaldi sort out kar denge.` },
+          { style: 'Short', text: `Inconvenience ke liye sorry. Hum ispar work kar rahe hain.` },
+          { style: 'Detailed', text: `Hum deeply apologize karte hain ki aapka experience expectations ke acche se meet nahi kar paya. Please details share karein taaki hum resolve kar sakein.` }
+        ];
+      } else {
+        return [
+          { style: 'Professional', text: `We're sorry to hear about your experience with ${brandName}. Our team is looking into this issue and we appreciate you bringing it to our attention.` },
+          { style: 'Friendly', text: `Sorry about the trouble! We understand your concern and would love to help get this sorted out.` },
+          { style: 'Short', text: `Sorry for the inconvenience. We're looking into this and will get back to you shortly.` },
+          { style: 'Detailed', text: `We're sorry that your experience with ${brandName} didn't meet expectations. We'd like to understand what happened and help resolve the issue as quickly as possible.` }
+        ];
+      }
+    } else {
+      // Neutral
+      return [
+        { style: 'Professional', text: `Thank you for reaching out to ${brandName}. Please let us know if you have any questions or require further assistance.` },
+        { style: 'Friendly', text: `Thanks for getting in touch! Let us know if we can help you with anything regarding ${brandName}.` },
+        { style: 'Short', text: `Thanks for your mention! Team ${brandName}.` },
+        { style: 'Detailed', text: `Thank you for sharing your thoughts about ${brandName}. We value all user feedback and are always here if you need any support.` }
+      ];
     }
-    if (language.toLowerCase() === 'hindi') {
-      return `नमस्ते! ${brandName} के प्रति आपके समर्थन के लिए बहुत-बहुत धन्यवाद। हमें आपकी प्रतिक्रिया सुनकर बहुत खुशी हुई!`;
-    }
-    return `Hello! Thank you so much for your support for ${brandName}. We are delighted to hear your feedback!`;
   }
 
   try {
     const client = getGenAIClient();
     const model = client.getGenerativeModel({
       model: 'gemini-3.1-flash-lite',
+      generationConfig: {
+        responseMimeType: 'application/json',
+      },
     });
 
     const prompt = `
-      You are an expert customer relationship management AI for the brand "${brandName}".
-      Write a response to the user review/mention below.
-      
-      User Mention: "${content.replace(/"/g, '\\"')}"
-      Detected Sentiment: ${sentiment}
-      Requested Output Language: ${language}
-      Requested Output Tone: ${tone}
+      You are an expert customer relations AI manager for "${brandName}".
+      Generate EXACTLY 4 distinct reply suggestions to the following social media mention/review.
 
-      Guidelines:
-      - Be helpful, polite, and brand-aligned.
-      - Keep it concise (under 280 characters if possible).
-      - Output ONLY the plain text reply in ${language} matching the requested ${tone} tone.
+      Original Mention: "${content.replace(/"/g, '\\"')}"
+      Author: "${author}"
+      Detected Sentiment: ${sentiment}
+      Detected Emotion: ${emotion}
+      Priority: ${priority}
+      Classification: ${classification}
+      Location Context: ${location || 'N/A'}
+      Requested Primary Language: ${language}
+      Requested Primary Tone: ${tone}
+
+      REQUIREMENTS:
+      1. Generate 4 suggestions with different styles: "Professional", "Friendly", "Short", and "Detailed".
+      2. If Requested Primary Language is "Auto Detect", detect the language/dialect of the original mention (e.g. English, Hindi, Hinglish, Bengali, etc.) and write suggestions in that language/style. Otherwise, write suggestions in the requested Language (${language}).
+      3. Tailor every response to the content context (e.g. delivery issues should mention delivery, product issues should mention product, positive feedback should be warm thank-you).
+      4. Never argue with negative complaints or make unsupported promises.
+      5. Make sure all 4 suggestions are noticeably different sentences.
+
+      Return JSON matching this exact structure:
+      {
+        "suggestions": [
+          { "style": "Professional", "text": "..." },
+          { "style": "Friendly", "text": "..." },
+          { "style": "Short", "text": "..." },
+          { "style": "Detailed", "text": "..." }
+        ]
+      }
     `;
 
-    const result = await geminiQueue.enqueue(() => model.generateContent(prompt), { label: 'Generate AI Reply' });
-    return result.response.text().trim();
+    const result = await geminiQueue.enqueue(() => model.generateContent(prompt), { label: 'Generate AI Reply Suggestions' });
+    const rawText = result.response.text();
+    const parsed = JSON.parse(rawText);
+
+    if (parsed && Array.isArray(parsed.suggestions) && parsed.suggestions.length > 0) {
+      return parsed.suggestions;
+    }
+    throw new Error('Gemini output lacked suggestions array');
   } catch (error) {
-    logger.error(`[AI Service] Generate reply failed: ${error.message}`);
-    return `Thank you for your feedback regarding ${brandName}. We appreciate your support!`;
+    logger.error(`[AI Service] Generate structured replies failed: ${error.message}`);
+    // Fallback array
+    return [
+      { style: 'Professional', text: `Thank you for sharing your feedback regarding ${brandName}. Our team appreciates your input.` },
+      { style: 'Friendly', text: `Thanks for reaching out! We appreciate your feedback on ${brandName}.` },
+      { style: 'Short', text: `Thank you for your feedback! Team ${brandName}.` },
+      { style: 'Detailed', text: `We appreciate you sharing your experience regarding ${brandName}. We're always striving to improve and value your thoughts.` }
+    ];
   }
 };
+
