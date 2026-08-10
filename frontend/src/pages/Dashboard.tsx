@@ -5,6 +5,7 @@ import { SentimentAreaChart } from '../components/AnalyticsCharts';
 import { useAuth } from '../hooks/useAuth';
 import { EnterpriseDrawer } from '../components/EnterpriseOverlays';
 import IntelligenceModule from '../components/IntelligenceModule';
+import AIIntelligenceHub from '../components/AIIntelligenceHub';
 import {
   Building, 
   RefreshCw, 
@@ -902,6 +903,12 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
 
             </div>
           )}
+
+          {/* AI Decision Intelligence Hub (Action Plan, Risk Radar, Location Intel) */}
+          <AIIntelligenceHub
+            brandId={selectedBrandId}
+            onNavigateMentions={() => setActiveTab && setActiveTab('mentions')}
+          />
 
           {/* n8n Agentic Automation Monitor */}
           <div className="space-y-3">

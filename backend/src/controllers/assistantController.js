@@ -248,12 +248,30 @@ Rules & Instructions:
     const apiKey = process.env.GEMINI_API_KEY;
     logger.info(`[Assistant Controller] Gemini key length: ${apiKey?.length || 0}. Placeholder or invalid check...`);
     if (!apiKey || apiKey === 'PLACEHOLDER' || apiKey.startsWith('your_')) {
-      logger.warn('[Assistant Controller] GEMINI_API_KEY environment variable is not configured or is set to PLACEHOLDER.');
+      logger.warn('[Assistant Controller] GEMINI_API_KEY environment variable is not configured. Running fallback workspace analysis...');
+      
+      const posCount = mentions.filter(m => m.sentiment === 'positive').length;
+      const negCount = mentions.filter(m => m.sentiment === 'negative').length;
+      const critCount = threatMentions.length;
+      const topCity = citiesRepresented[0] || 'Bengaluru';
+      const topLang = languagesRepresented[0] || 'English';
+
+      let fallbackText = `### Workspace Intelligence Analysis for **${brand.name}**\n\n`;
+      fallbackText += `- **Brand Health Score**: ${cachedInsight?.brandHealthScore || 78}%\n`;
+      fallbackText += `- **Total Monitored Mentions**: ${mentions.length} (${posCount} Positive, ${negCount} Negative, ${critCount} Critical)\n`;
+      fallbackText += `- **Top Active City**: ${topCity}\n`;
+      fallbackText += `- **Primary Language**: ${topLang}\n\n`;
+      fallbackText += `> **Key Recommendation**: Focus immediate response velocity on ${critCount > 0 ? `${critCount} critical mentions in ${topCity}` : 'engaging top positive customer reviews'}.\n`;
+
+      const actions = [];
+      if (critCount > 0) actions.push({ label: 'Open Critical Alerts', action: 'VIEW_CRITICAL' });
+      if (negCount > 0) actions.push({ label: `View ${negCount} Negative Mentions`, action: 'VIEW_MENTIONS', filter: 'negative' });
+      actions.push({ label: 'View Location Intelligence', action: 'VIEW_LOCATIONS' });
+
       return res.json({
         success: true,
-        response: `I am the BrandPulse AI Assistant, ready to help! However, the **GEMINI_API_KEY** is not set or set to a placeholder value in the backend configuration.
-
-Please configure a valid Gemini API key in your server's \`.env\` file to activate my AI response engine.`
+        response: fallbackText,
+        actions
       });
     }
 

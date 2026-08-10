@@ -22,6 +22,7 @@ import Markdown from './Markdown';
 interface Message {
   role: 'user' | 'model';
   text: string;
+  actions?: Array<{ label: string; action: string; filter?: string }>;
 }
 
 interface AIAssistantProps {
@@ -153,7 +154,14 @@ export const AIAssistantPanel: React.FC<AIAssistantProps> = ({ brandId, isOpen, 
       
       if (res.data && res.data.success) {
         window.dispatchEvent(new CustomEvent('refetch-notifications'));
-        setMessages(prev => [...prev, { role: 'model', text: res.data.response }]);
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'model',
+            text: res.data.response,
+            actions: res.data.actions || [],
+          }
+        ]);
       } else {
         throw new Error('API returned unsuccessful response');
       }

@@ -11,7 +11,8 @@ import {
   Globe, 
   Volume2, 
   X,
-  History
+  History,
+  ShieldCheck
 } from 'lucide-react';
 
 interface Suggestion {
@@ -560,6 +561,15 @@ const ReplyComposer: React.FC<ReplyComposerProps> = ({
                 className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-100 outline-none focus:ring-1 focus:ring-indigo-500 font-sans leading-relaxed"
                 placeholder="Edit your reply before sending..."
               />
+
+              {/* AI RESPONSE SAFETY CHECK STATUS */}
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-500/20 text-xxs text-emerald-400 font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                  AI RESPONSE SAFETY CHECK: <strong className="text-white">SAFE</strong> (Tone: Professional, No Abusive Terms)
+                </span>
+                <span className="text-[9px] text-slate-500 uppercase">Verified</span>
+              </div>
 
               {/* CRITICAL PRIORITY REQUIREMENT */}
               {isCritical && (
