@@ -1373,8 +1373,15 @@ export const retryResponse = async (req, res, next) => {
     responseDoc.mode = 'DEMO';
     responseDoc.isDemo = true;
     responseDoc.sentAt = new Date();
-    responseDoc.error = 'Demo Mode - simulated retry succeeded.';
-    await responseDoc.save();
+    res.json({
+      success: true,
+      message: 'Demo Mode - reply simulated successfully upon retry.',
+      data: responseDoc,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc    Submit a Report Case for a mention (Spam, Fake Review, Fake News, Harassment, etc.)
 // @route   POST /api/mentions/:id/report
