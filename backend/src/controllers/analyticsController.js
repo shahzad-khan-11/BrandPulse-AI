@@ -963,6 +963,11 @@ export const checkResponseSafety = async (req, res, next) => {
         }
       }
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get Sentiment Trend Over Time (7, 30, 90 days or custom)
 // @route   GET /api/analytics/sentiment-trend
 // @access  Private
