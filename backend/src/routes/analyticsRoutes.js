@@ -18,7 +18,8 @@ import {
   getSentimentDrivers,
   getLanguageIntelligence,
   getCityPlatformMatrix,
-  checkResponseSafety
+  checkResponseSafety,
+  getSentimentTrend
 } from '../controllers/analyticsController.js';
 import protect from '../middleware/auth.js';
 
@@ -31,6 +32,7 @@ router.get('/impact-score', getBrandImpactScore);
 router.get('/what-changed', getWhatChanged);
 router.get('/executive-summary', getExecutiveSummary);
 router.get('/platform-intelligence', getPlatformIntelligence);
+router.get('/sentiment-trend', getSentimentTrend);
 router.get('/action-plan', getAIActionPlan);
 router.get('/reputation-risk', getReputationRisk);
 router.get('/viral-issues', getViralIssues);

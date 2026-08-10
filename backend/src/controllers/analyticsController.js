@@ -963,9 +963,53 @@ export const checkResponseSafety = async (req, res, next) => {
         }
       }
     });
+// @desc    Get Sentiment Trend Over Time (7, 30, 90 days or custom)
+// @route   GET /api/analytics/sentiment-trend
+// @access  Private
+export const getSentimentTrend = async (req, res, next) => {
+  const { brandId, days = 7 } = req.query;
+  if (!brandId) return res.status(400).json({ success: false, message: 'brandId parameter is required' });
+
+  try {
+    const brand = await BrandRepository.findOne({ _id: brandId, organization: req.user.organization });
+    if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
+
+    const mentions = await BrandMentionRepository.find({ brand: brandId, isDeleted: false });
+    const timeframeDays = parseInt(days, 10) || 7;
+    const now = new Date();
+
+    const trendPoints = [];
+    for (let i = timeframeDays - 1; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateStr = d.toISOString().split('T')[0];
+
+      const dayMentions = mentions.filter(m => {
+        const mDate = new Date(m.publishedAt).toISOString().split('T')[0];
+        return mDate === dateStr;
+      });
+
+      const total = dayMentions.length;
+      const pos = dayMentions.filter(m => m.sentiment === 'positive').length;
+      const neg = dayMentions.filter(m => m.sentiment === 'negative').length;
+      const neu = dayMentions.filter(m => m.sentiment === 'neutral').length;
+
+      trendPoints.push({
+        date: dateStr,
+        total,
+        positive: pos,
+        negative: neg,
+        neutral: neu,
+        positivePct: total > 0 ? `${Math.round((pos / total) * 100)}%` : '0%',
+        negativePct: total > 0 ? `${Math.round((neg / total) * 100)}%` : '0%',
+        neutralPct: total > 0 ? `${Math.round((neu / total) * 100)}%` : '0%',
+      });
+    }
+
+    res.json({ success: true, timeframeDays, data: trendPoints });
   } catch (error) {
     next(error);
   }
 };
+
 
 

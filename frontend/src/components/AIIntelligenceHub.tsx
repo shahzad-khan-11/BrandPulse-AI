@@ -50,8 +50,6 @@ const AIIntelligenceHub: React.FC<AIIntelligenceHubProps> = ({
         locRes,
         prioRes,
         voiceRes,
-        driverRes,
-        langRes,
         matrixRes,
       ] = await Promise.allSettled([
         api.get(`/analytics/action-plan?brandId=${brandId}`),
@@ -60,8 +58,6 @@ const AIIntelligenceHub: React.FC<AIIntelligenceHubProps> = ({
         api.get(`/analytics/location-intelligence?brandId=${brandId}`),
         api.get(`/analytics/priority-queue?brandId=${brandId}`),
         api.get(`/analytics/customer-voice?brandId=${brandId}`),
-        api.get(`/analytics/drivers?brandId=${brandId}`),
-        api.get(`/analytics/language-intelligence?brandId=${brandId}`),
         api.get(`/analytics/city-platform-matrix?brandId=${brandId}`),
       ]);
 

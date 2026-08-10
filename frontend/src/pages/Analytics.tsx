@@ -12,6 +12,7 @@ import {
   Building,
   Target
 } from 'lucide-react';
+import AIIntelligenceHub from '../components/AIIntelligenceHub';
 
 interface Brand {
   _id: string;
@@ -185,6 +186,9 @@ const Analytics: React.FC = () => {
         </div>
       ) : insights ? (
         <div className="space-y-6">
+
+          {/* AI Decision Support & Intelligence Hub */}
+          <AIIntelligenceHub brandId={selectedBrandId} />
           
           {/* Brand Health KPI Block */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
