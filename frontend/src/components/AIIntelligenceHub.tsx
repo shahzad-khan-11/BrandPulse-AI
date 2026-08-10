@@ -71,8 +71,6 @@ const AIIntelligenceHub: React.FC<AIIntelligenceHubProps> = ({
       if (locRes.status === 'fulfilled') setLocationIntel(locRes.value.data.data || []);
       if (prioRes.status === 'fulfilled') setPriorityQueue(prioRes.value.data.data || []);
       if (voiceRes.status === 'fulfilled') setCustomerVoice(voiceRes.value.data.data || null);
-      if (driverRes.status === 'fulfilled') setDrivers(driverRes.value.data.data || null);
-      if (langRes.status === 'fulfilled') setLangIntel(langRes.value.data.data || []);
       if (matrixRes.status === 'fulfilled') setCityMatrix(matrixRes.value.data.data || []);
     } catch (err) {
       console.error('Failed to load AI intelligence data:', err);
