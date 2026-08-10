@@ -357,38 +357,9 @@ export const sendLoginOtpEmail = async (email, name, otpCode) => {
     <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);border:2px border #6366f1;border-radius:12px;padding:20px;margin:24px 0;text-align:center;">
       <span style="font-size:36px;font-weight:900;letter-spacing:10px;color:#a5b4fc;font-family:monospace;">${otpCode}</span>
     </div>
-    ${warningBox('This code is valid for 10 minutes and can only be used once. Do NOT share this code with anyone.')}
+    ${warningBox('This OTP is valid for 5 minutes and can only be used once. If you did not attempt to log in, you can ignore this email.')}
   `;
   return sendEmail({ to: email, subject: `[${otpCode}] BrandPulse AI — Login Verification Code 🔐`, html: wrapTemplate(content) });
-};
-
-/**
- * New Device Approval email — sent when unrecognized device attempts login
- */
-export const sendNewDeviceApprovalEmail = async (email, name, deviceInfo, approvalToken) => {
-  const approveUrl = `${process.env.FRONTEND_URL || 'https://brandpulse-ai-three.vercel.app'}/approve-device?token=${approvalToken}&action=approve`;
-  const rejectUrl = `${process.env.FRONTEND_URL || 'https://brandpulse-ai-three.vercel.app'}/approve-device?token=${approvalToken}&action=reject`;
-  
-  const content = `
-    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#f59e0b;">
-      New Unrecognized Device Detected 🛡️
-    </h2>
-    <p style="color:#94a3b8;margin:0 0 16px;">Hello <strong style="color:#e2e8f0;">${name || 'User'}</strong>,</p>
-    <p style="color:#94a3b8;margin:0 0 16px;">
-      A login attempt was initiated from a new device for your BrandPulse AI account. Please confirm if this was you:
-    </p>
-    <div style="background-color:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin:16px 0;font-size:13px;color:#cbd5e1;">
-      <p style="margin:0 0 6px;"><strong>Browser / OS:</strong> ${deviceInfo.browser || 'Unknown'} on ${deviceInfo.os || 'Unknown'}</p>
-      <p style="margin:0 0 6px;"><strong>IP Address:</strong> ${deviceInfo.ipAddress || '127.0.0.1'}</p>
-      <p style="margin:0;"><strong>Timestamp:</strong> ${new Date().toUTCString()}</p>
-    </div>
-    <div style="display:flex;gap:12px;margin:24px 0;">
-      <a href="${approveUrl}" target="_blank" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;background-color:#16a34a;text-decoration:none;border-radius:8px;">Approve Device</a>
-      <a href="${rejectUrl}" target="_blank" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;background-color:#dc2626;text-decoration:none;border-radius:8px;">Reject & Block</a>
-    </div>
-    ${warningBox('This approval link expires in 15 minutes. If this was not you, reject the attempt immediately and change your password.')}
-  `;
-  return sendEmail({ to: email, subject: 'BrandPulse AI — New Device Login Authorization Required 🛡️', html: wrapTemplate(content) });
 };
 
 /**

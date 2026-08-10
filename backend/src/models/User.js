@@ -98,14 +98,6 @@ const userSchema = new mongoose.Schema(
       default: 0,
       select: false,
     },
-    deviceApprovalToken: {
-      type: String,
-      select: false,
-    },
-    pendingDeviceApproval: {
-      type: mongoose.Schema.Types.Mixed,
-      select: false,
-    },
   },
   {
     timestamps: true,

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import api from '../services/api';
-import { Activity, Sparkles, Lock, Mail, Eye, EyeOff, KeyRound, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Activity, Sparkles, Lock, Mail, Eye, EyeOff, KeyRound, CheckCircle2 } from 'lucide-react';
 
 interface LoginProps {
   onRegisterClick: () => void;
@@ -17,9 +17,8 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
   const [rememberMe, setRememberMe] = useState(false);
 
   // OTP Step state
-  const [step, setStep] = useState<'credentials' | 'otp' | 'device_approval'>('credentials');
+  const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
   const [otp, setOtp] = useState('');
-  const [trustDevice, setTrustDevice] = useState(false);
   const [countdown, setCountdown] = useState(45);
   const [canResend, setCanResend] = useState(false);
 
@@ -47,14 +46,7 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/login', {
-        email,
-        password,
-        deviceInfo: {
-          browser: navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Web Browser',
-          os: navigator.platform || 'Desktop OS',
-        }
-      });
+      const res = await api.post('/auth/login', { email, password });
 
       if (res.data.success && res.data.requiresOtp) {
         setStep('otp');
@@ -63,7 +55,7 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
         setCanResend(false);
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid email or password credentials.');
+      setError(err.response?.data?.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -76,21 +68,12 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/verify-otp', {
-        email,
-        otp,
-        trustDevice,
-      });
+      const res = await api.post('/auth/verify-otp', { email, otp });
 
-      if (res.data.success) {
-        if (res.data.requiresDeviceApproval) {
-          setStep('device_approval');
-          setInfoMsg(res.data.message || 'New device authorization email sent to your inbox.');
-        } else if (res.data.accessToken) {
-          localStorage.setItem('token', res.data.accessToken);
-          localStorage.setItem('refreshToken', res.data.refreshToken);
-          updateUser(res.data.user);
-        }
+      if (res.data.success && res.data.accessToken) {
+        localStorage.setItem('token', res.data.accessToken);
+        localStorage.setItem('refreshToken', res.data.refreshToken);
+        updateUser(res.data.user);
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid OTP code. Verification failed.');
@@ -134,7 +117,7 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
             <Activity className="h-6 w-6 text-white animate-pulse" />
           </div>
           <h2 className="text-2.5xl font-black tracking-tight mt-5 bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
-            {step === 'credentials' ? 'Welcome to BrandPulse AI' : 'Verify Login Authorization'}
+            {step === 'credentials' ? 'Welcome to BrandPulse AI' : 'Verify Login'}
           </h2>
           <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-2.5 font-bold flex items-center gap-1.5 justify-center">
             <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
@@ -239,7 +222,7 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
           <form onSubmit={handleOtpVerify} className="space-y-6 relative animate-fade-in">
             <div className="space-y-2">
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 text-center">
-                Enter 6-Digit OTP Code
+                Enter 6-Digit Verification Code
               </label>
               <div className="relative">
                 <input
@@ -255,23 +238,13 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={trustDevice}
-                  onChange={(e) => setTrustDevice(e.target.checked)}
-                  className="rounded bg-slate-950 border-slate-800 text-indigo-600"
-                />
-                <span className="text-xxs font-semibold">Trust this device for 30 days</span>
-              </label>
-
+            <div className="flex items-center justify-end text-xs text-slate-400">
               <button
                 type="button"
                 onClick={handleResendOtp}
                 disabled={!canResend || loading}
                 className={`text-xxs font-extrabold transition-colors ${
-                  canResend ? 'text-indigo-400 hover:text-indigo-300' : 'text-slate-600'
+                  canResend ? 'text-indigo-400 hover:text-indigo-350' : 'text-slate-600'
                 }`}
               >
                 {canResend ? 'Resend OTP' : `Resend in ${countdown}s`}
@@ -287,10 +260,10 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
                 {loading ? (
                   <>
                     <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                    <span>Verifying Code...</span>
+                    <span>Verifying OTP...</span>
                   </>
                 ) : (
-                  <span>Verify Code & Complete Sign In</span>
+                  <span>Verify OTP</span>
                 )}
               </button>
 
@@ -303,26 +276,6 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick, onForgotClick }) => {
               </button>
             </div>
           </form>
-        )}
-
-        {/* STEP 3: UNRECOGNIZED NEW DEVICE APPROVAL WAITING SCREEN */}
-        {step === 'device_approval' && (
-          <div className="space-y-6 text-center animate-fade-in">
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-2">
-              <ShieldAlert className="h-8 w-8 text-amber-400 mx-auto animate-bounce" />
-              <h4 className="font-extrabold text-sm text-slate-100">Unrecognized Device Approval Sent</h4>
-              <p className="text-xxs text-slate-300 leading-relaxed">
-                An authorization request link was dispatched to <strong className="text-indigo-400">{email}</strong>. Please open your email inbox and click "Approve Device" to complete your login session.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setStep('credentials')}
-              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all"
-            >
-              Return to Login Screen
-            </button>
-          </div>
         )}
 
         <div className="text-center text-xs text-slate-500 mt-8 relative font-bold uppercase tracking-wider text-[10px]">
