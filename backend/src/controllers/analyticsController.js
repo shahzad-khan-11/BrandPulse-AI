@@ -911,16 +911,19 @@ export const getCityPlatformMatrix = async (req, res, next) => {
     if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
 
     const mentions = await BrandMentionRepository.find({ brand: brandId, isDeleted: false });
-    const cities = ['Patna', 'Delhi', 'Bengaluru', 'Mumbai'];
+    
+    // Extract unique cities dynamically from brand mentions or default to brand location
+    const extractedCities = Array.from(new Set(mentions.map(m => m.location?.city).filter(Boolean)));
+    const cities = extractedCities.length > 0 ? extractedCities.slice(0, 5) : [brand.city || 'Patna'];
     const platforms = ['twitter', 'facebook', 'instagram', 'google_reviews'];
 
     const matrix = cities.map(c => {
       const row = { city: c };
       platforms.forEach(p => {
-        const matching = mentions.filter(m => (m.location?.city || 'Delhi') === c && (m.source || 'web') === p);
+        const matching = mentions.filter(m => m.location?.city === c && (m.source || 'web') === p);
         const pos = matching.filter(m => m.sentiment === 'positive').length;
         const total = matching.length;
-        row[p] = total > 0 ? Math.round((pos / total) * 100) : 75; // Performance metric 0-100
+        row[p] = total > 0 ? Math.round((pos / total) * 100) : 0;
       });
       return row;
     });
