@@ -64,7 +64,9 @@ const Analytics: React.FC = () => {
         const res = await api.get('/brands');
         if (res.data.success && res.data.data.length > 0) {
           setBrands(res.data.data);
-          setSelectedBrandId(res.data.data[0]._id);
+          const savedBrandId = localStorage.getItem('active-brand-id');
+          const isValidSaved = savedBrandId && res.data.data.some((b: any) => b._id === savedBrandId);
+          setSelectedBrandId(isValidSaved ? savedBrandId : res.data.data[0]._id);
         } else {
           setLoading(false);
         }
@@ -159,7 +161,12 @@ const Analytics: React.FC = () => {
           <Building className="h-4.5 w-4.5 text-indigo-500 dark:text-indigo-400" />
           <select
             value={selectedBrandId}
-            onChange={(e) => setSelectedBrandId(e.target.value)}
+            onChange={(e) => {
+              const newBrandId = e.target.value;
+              setSelectedBrandId(newBrandId);
+              localStorage.setItem('active-brand-id', newBrandId);
+              window.dispatchEvent(new CustomEvent('brand-changed', { detail: newBrandId }));
+            }}
             className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold focus:ring-1 focus:ring-indigo-500 text-slate-200 outline-none cursor-pointer"
           >
             {brands.map((b) => (

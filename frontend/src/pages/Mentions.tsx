@@ -90,7 +90,24 @@ const Mentions: React.FC = () => {
 
         if (brandsRes.data.success && brandsRes.data.data.length > 0) {
           setBrands(brandsRes.data.data);
-          setSelectedBrandId(brandsRes.data.data[0]._id);
+          
+          // Parse query params first, fallback to localStorage or first brand
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlBrandId = urlParams.get('brandId');
+          const savedBrandId = localStorage.getItem('active-brand-id');
+          
+          const validBrandId = [urlBrandId, savedBrandId].find(id => id && brandsRes.data.data.some((b: any) => b._id === id));
+          setSelectedBrandId(validBrandId || brandsRes.data.data[0]._id);
+
+          // Parse search or hashtag query params
+          const searchParam = urlParams.get('search') || urlParams.get('hashtag') || urlParams.get('topic');
+          if (searchParam) setSearch(searchParam);
+          const sourceParam = urlParams.get('source');
+          if (sourceParam) setSource(sourceParam);
+          const sentimentParam = urlParams.get('sentiment');
+          if (sentimentParam) setSentiment(sentimentParam);
+          const cityParam = urlParams.get('city');
+          if (cityParam) setCity(cityParam);
         } else {
           setLoading(false);
         }
@@ -227,7 +244,12 @@ const Mentions: React.FC = () => {
             <Building className="h-4.5 w-4.5 text-indigo-500 dark:text-indigo-400" />
             <select
               value={selectedBrandId}
-              onChange={(e) => setSelectedBrandId(e.target.value)}
+              onChange={(e) => {
+                const newBrandId = e.target.value;
+                setSelectedBrandId(newBrandId);
+                localStorage.setItem('active-brand-id', newBrandId);
+                window.dispatchEvent(new CustomEvent('brand-changed', { detail: newBrandId }));
+              }}
               className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold focus:ring-1 focus:ring-indigo-500 text-slate-200 outline-none cursor-pointer"
             >
               {brands.map((b) => (

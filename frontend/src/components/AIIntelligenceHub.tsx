@@ -240,10 +240,10 @@ const AIIntelligenceHub: React.FC<AIIntelligenceHubProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => onNavigateMentions && onNavigateMentions()}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xxs font-bold transition-all"
+                    onClick={() => onNavigateMentions && onNavigateMentions(act.title)}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xxs font-bold transition-all"
                   >
-                    View
+                    View Mentions
                   </button>
                 </div>
               </div>
